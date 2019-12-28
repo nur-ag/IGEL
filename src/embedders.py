@@ -98,10 +98,10 @@ class StructuralEmbedder(nn.Module):
         structure_tensor = _torch.sparse.FloatTensor(coordinates, values, torch.Size([batch_size, num_values]))
 
         # Compute the total per-node degree counts to normalize 
-        total_count_vector = torch.sparse.sum(structure_tensor, dim=1).to_dense().reshape(batch_size, 1) 
+        total_count_vector = torch.sparse.sum(structure_tensor, dim=1)
 
         # Sparse matrix multiplication to get the features off the embedding matrix and renormalize
         embed = torch.sparse.mm(structure_tensor, self.matrix)
-        output = embed / total_count_vector
-        return output.to(self.device)
+        output = embed / total_count_vector._values().reshape(batch_size, 1) 
+        return output
         

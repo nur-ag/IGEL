@@ -90,6 +90,10 @@ sa2 = SamplingAggregator(sa1, sampling_features, output_units=NUM_OUTPUTS, num_a
 #model = StaticStructSamplingModel(sa0, 2 * agg_features * NUM_ATTENTION_HEADS, num_labels).to(device)
 model = StaticStructSamplingModel(sa_beef, sampling_features, num_labels).to(device)
 
+# Do the mapping beforehand
+_ = ste.mapping(G_train.vs, G_train)
+print('Prepared the node structural mapping...')
+
 # Let's do some training
 def chunks(l, n):
     for i in range(0, len(l), n):
