@@ -113,7 +113,7 @@ for epoch in trange(1, NUM_EPOCHS + 1, desc='Epoch'):
         node_indices = batch['id']
         node_labels = labels[node_indices]
         loss = criterion(output, node_labels)
-        losses.append(loss.data.mean())
+        losses.append(loss.data.mean().tolist())
         loss.backward()
         optimizer.step()
     end_time = time()
@@ -125,8 +125,8 @@ for epoch in trange(1, NUM_EPOCHS + 1, desc='Epoch'):
             G_split = splits[split]
             num_instances = len(G_split.vs)
             pred = model(G_split.vs, G_split)
-            split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).numpy().round()
-            split_true = labels[G_split.vs['id']].reshape(num_instances, -1).numpy()
+            split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).cpu().numpy().round()
+            split_true = labels[G_split.vs['id']].reshape(num_instances, -1).cpu().numpy()
 
             values = precision_recall_fscore_support(split_pred, split_true, average='micro')
             values = [split] + list(values)
