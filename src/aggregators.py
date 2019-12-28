@@ -136,7 +136,7 @@ class SamplingAggregator(nn.Module):
         complete_set, node_neighbours = self.get_node_set(node_seq, G)
 
         # Compute tensors for the whole batch and find mappings
-        tensors = self.embedder.forward(G.vs[complete_set], G)
+        tensors = self.embedder(G.vs[complete_set], G)
         node_mappings = {n: i for i, n in enumerate(complete_set)}
 
         # Compute neighbourhood aggregation on every node in the input batch
