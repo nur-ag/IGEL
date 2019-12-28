@@ -32,12 +32,14 @@ class StructuralEmbedder(nn.Module):
                  num_features,  
                  distance=1,
                  use_distances=False,
-                 cache_field='neigh_deg'):
+                 cache_field='neigh_deg',
+                 device=torch.device('cpu')):
         super(StructuralEmbedder, self).__init__()
         self.distance = distance
         self.use_distances = use_distances
         self.cache_field = cache_field
         self.max_degree = max(G.degree())
+        self.device = device
         
         total_elements = (distance + 1) * self.max_degree
         structural_data = torch.rand(total_elements + 1, num_features)
@@ -48,7 +50,7 @@ class StructuralEmbedder(nn.Module):
         unseen_degrees = [d for d in range(1, self.max_degree + 1) if d not in valid_degrees]
         zero_degrees = [r * self.max_degree + d for d in unseen_degrees for r in range(distance + 1)]
         structural_data[zero_degrees] = 0.0
-        self.matrix = nn.Parameter(structural_data)
+        self.matrix = nn.Parameter(structural_data).to(device)
 
     def compute_mapping(self, node_seq, G):
         node_indices = [node.index for node in node_seq]
@@ -80,15 +82,20 @@ class StructuralEmbedder(nn.Module):
 
     def forward(self, node_seq, G):
         indices, counts = zip(*self.mapping(node_seq, G))
-        coordinates = torch.LongTensor([
+
+        # Determine the torch package to use if we use CUDA or not
+        _torch = torch.cuda if self.device.type == 'cuda' else torch
+
+        # Prepare sparse vector coordinates
+        coordinates = _torch.LongTensor([
             [i for i, idx in enumerate(indices) for _ in range(len(idx))],
             [i for idx in indices for i in idx]])
-        values = torch.FloatTensor([c for cnt in counts for c in cnt])
+        values = _torch.FloatTensor([c for cnt in counts for c in cnt])
 
         # Create the sparse vector to multiply by the embedding matrix
         batch_size = len(indices)
         num_values = self.matrix.data.shape[0]
-        structure_tensor = torch.sparse.FloatTensor(coordinates, values, torch.Size([batch_size, num_values]))
+        structure_tensor = _torch.sparse.FloatTensor(coordinates, values, torch.Size([batch_size, num_values]))
 
         # Compute the total per-node degree counts to normalize 
         total_count_vector = torch.sparse.sum(structure_tensor, dim=1).to_dense().reshape(batch_size, 1) 
@@ -96,5 +103,5 @@ class StructuralEmbedder(nn.Module):
         # Sparse matrix multiplication to get the features off the embedding matrix and renormalize
         embed = torch.sparse.mm(structure_tensor, self.matrix)
         output = embed / total_count_vector
-        return output
+        return output.to(self.device)
         

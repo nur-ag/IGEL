@@ -140,17 +140,12 @@ class SamplingAggregator(nn.Module):
         node_mappings = {n: i for i, n in enumerate(complete_set)}
 
         # Compute neighbourhood aggregation on every node in the input batch
-        # ToDo: Can this be distributed? Check HogWild?
         node_tensors = []
         for node_index, neighbourhood in node_neighbours.items():
-            neigh_indices = [node_mappings[neigh.index] for neigh in neighbourhood]
-            neigh_tensors = tensors[neigh_indices]
-
-            # Build shared tensors
-            num_neighbours = len(neighbourhood)
-            tensor_idx = node_mappings[node_index]
-            node_tensor = tensors[tensor_idx].repeat(num_neighbours).reshape(num_neighbours, -1)
-            neigh_tensors = torch.cat([neigh_tensors, node_tensor], dim=1)
+            neigh_indices = [[node_mappings[neigh.index], node_mappings[node_index]]
+                                for neigh in neighbourhood]
+            neigh_tensors = tensors[neigh_indices, :]
+            neigh_tensors = neigh_tensors.reshape(len(neighbourhood), self.input_units * 2)
 
             # Compute dense and attention layers
             tensor = self.dense(neigh_tensors)
