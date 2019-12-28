@@ -39,9 +39,9 @@ print('Loaded 3 graphs!')
 train_indices = [n.index for n in splits['train'].vs]
 features = np.load('{}/ppi-feats.npy'.format(DATASET_PATH)).astype(np.float32)
 features = StandardScaler().fit(features[train_indices]).transform(features)
-features = torch.from_numpy(features).float().detach()
+features = torch.from_numpy(features).float().detach().to(device)
 labels = {int(k): v for k, v in json.load(open('{}/ppi-class_map.json'.format(DATASET_PATH))).items()}
-labels = torch.FloatTensor([v for k, v in sorted(labels.items(), key=lambda x: x[0])]).detach()
+labels = torch.FloatTensor([v for k, v in sorted(labels.items(), key=lambda x: x[0])]).detach().to(device)
 
 agg_features = STRUCTURAL_VECTOR_LENGTH + features.shape[-1]
 sampling_features = NUM_ATTENTION_HEADS * NUM_OUTPUTS
