@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_recall_fscore_support
 
 
-DATASET_PATH = '{}/../PPI'.format(os.path.realpath(__file__))
+DATASET_PATH = '{}/../PPI'.format(os.path.dirname(os.path.realpath(__file__)))
 STRUCTURAL_VECTOR_LENGTH = 30
 NUM_ATTENTION_HEADS = 8
 NUM_OUTPUTS = 40
