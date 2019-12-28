@@ -47,6 +47,7 @@ labels = torch.FloatTensor([v for k, v in sorted(labels.items(), key=lambda x: x
 agg_features = STRUCTURAL_VECTOR_LENGTH + features.shape[-1]
 sampling_features = NUM_ATTENTION_HEADS * NUM_OUTPUTS
 num_labels = labels.shape[-1]
+num_features = features.shape[-1]
 
 print('Loaded features and labels!')
 
@@ -106,6 +107,7 @@ indices = [node.index for node in G_train.vs]
 from tqdm import tqdm, trange
 from time import time
 for epoch in trange(1, NUM_EPOCHS + 1, desc='Epoch'):
+    model = model.train()
     np.random.shuffle(indices)
     all_batches = [batch for batch in chunks(indices, BATCH_SIZE)]
     losses = []
@@ -126,6 +128,7 @@ for epoch in trange(1, NUM_EPOCHS + 1, desc='Epoch'):
 
     tqdm.write('Epoch {} took {} seconds, with a total running loss of {}.'.format(epoch, end_time - start_time, running_loss))
     if epoch % DISPLAY_EPOCH == 0:
+        model = model.eval()
         for split in ['valid']:
             G_split = splits[split]
             num_instances = len(G_split.vs)

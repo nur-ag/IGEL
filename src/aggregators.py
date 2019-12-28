@@ -32,7 +32,7 @@ class MultiEmbedderAggregator(nn.Module):
         self.aggregation = aggregation
 
     def forward(self, node_seq, G):
-        outputs = [e.forward(node_seq, G) for e in self.embedders]
+        outputs = [e(node_seq, G) for e in self.embedders]
         merged = self.aggregation(outputs)
         return merged
 
