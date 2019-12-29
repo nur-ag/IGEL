@@ -11,15 +11,21 @@ import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_recall_fscore_support
 
+from samplers import *
+
 
 DATASET_PATH = '{}/../PPI'.format(os.path.dirname(os.path.realpath(__file__)))
 STRUCTURAL_VECTOR_LENGTH = 30
 NUM_ATTENTION_HEADS = 8
+NUM_HIDDEN = 3
+HIDDEN_UNITS = 120
 NUM_OUTPUTS = 40
 BATCH_SIZE = 32
 LEARNING_RATE = 0.005
 NUM_EPOCHS = 100
 DISPLAY_EPOCH = 5
+NODES_TO_SAMPLE = 0
+SAMPLING_MODEL = None # log_degree_sampler
 
 USE_CUDA = True 
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
@@ -32,6 +38,11 @@ for split in all_splits:
     split_path = '{}/ppi-{}.edgelist'.format(DATASET_PATH, split)
     G = ig.Graph.Read_Ncol(split_path, names=True, weights=False, directed=False)
     G.vs['id'] = [int(n) for n in G.vs['name']]
+    G.vs['pagerank'] = G.pagerank()
+    G.vs['betweenness'] = G.betweenness()
+    G.vs['degree'] = G.degree()
+    G.vs['log_degree'] = [np.log(d) + 1 for d in G.degree()]
+    G.vs['clust_coeff'] = G.transitivity_local_undirected(mode='zero')
     splits[split] = G
 
 print('Loaded 3 graphs!')
@@ -76,17 +87,9 @@ mea = MultiEmbedderAggregator([sfe, ste]).to(device)
 sa = SamplingAggregator(mea, agg_features, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
 saa = SamplingAggregator(sa, sampling_features, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
 
-sa_beef = SamplingAggregator(mea, agg_features, num_hidden=3, hidden_units=120, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
-sa_beef2 = SamplingAggregator(sa_beef, sampling_features, num_hidden=3, hidden_units=120, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
-sa_beef3 = SamplingAggregator(sa_beef2, sampling_features, num_hidden=3, hidden_units=120, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
-
-sa0 = SamplingAggregator(mea, agg_features, output_units=0, hidden_units=0, num_hidden=0, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
-
-sm1 = SamplingAggregator(mea, agg_features, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=10).to(device)
-sm2 = SamplingAggregator(sm1, sampling_features, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=25).to(device)
-
-sa1 = SamplingAggregator(sfe, features.shape[-1], output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
-sa2 = SamplingAggregator(sa1, sampling_features, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
+sa_beef = SamplingAggregator(mea, agg_features, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL).to(device)
+sa_beef2 = SamplingAggregator(sa_beef, sampling_features, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL).to(device)
+sa_beef3 = SamplingAggregator(sa_beef2, sampling_features, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL).to(device)
 
 #model = StaticStructSamplingModel(sa0, 2 * agg_features * NUM_ATTENTION_HEADS, num_labels).to(device)
 model = StaticStructSamplingModel(sa_beef, sampling_features, num_labels).to(device)
