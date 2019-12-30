@@ -46,6 +46,7 @@ class SamplingAggregator(nn.Module):
                  num_hidden=1, 
                  activation=nn.ELU,
                  aggregation=combine_sum,
+                 include_node=False,
                  nodes_to_sample=0,
                  sample_with_replacement=True,
                  sampling_model=None,
@@ -61,6 +62,7 @@ class SamplingAggregator(nn.Module):
         self.output_units = output_units if output_units > 0 else input_units
         self.hidden_units = hidden_units if num_hidden > 0 else self.output_units
         self.num_hidden = num_hidden
+        self.include_node = include_node
         self.nodes_to_sample = nodes_to_sample
         self.sample_with_replacement = sample_with_replacement
         self.sampling_model = sampling_model
@@ -157,6 +159,8 @@ class SamplingAggregator(nn.Module):
             # At this point, we aggregate over a tensor for the node with shape:
             # (num_neighbours, output_units * min(1, num_attention_heads))
             node_output = self.aggregation(tensor)
+            if self.include_node:
+                node_output = torch.cat([node_output, tensors[node_mappings[node_index]]])
             node_tensors.append(node_output)
         return torch.stack(node_tensors)
 
