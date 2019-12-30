@@ -18,14 +18,17 @@ DATASET_PATH = '{}/../PPI'.format(os.path.dirname(os.path.realpath(__file__)))
 STRUCTURAL_VECTOR_LENGTH = 30
 NUM_ATTENTION_HEADS = 8
 NUM_HIDDEN = 3
-HIDDEN_UNITS = 120
-NUM_OUTPUTS = 40
+HIDDEN_UNITS = 200
+NUM_OUTPUTS = 80
 BATCH_SIZE = 32
-LEARNING_RATE = 0.005
+LEARNING_RATE = 0.001
 NUM_EPOCHS = 100
 DISPLAY_EPOCH = 5
 NODES_TO_SAMPLE = 0
 SAMPLING_MODEL = None # log_degree_sampler
+INCLUDE_NODE = True
+
+MODEL_DEPTH = 1
 
 USE_CUDA = True 
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
@@ -56,7 +59,6 @@ labels = {int(k): v for k, v in json.load(open('{}/ppi-class_map.json'.format(DA
 labels = torch.FloatTensor([v for k, v in sorted(labels.items(), key=lambda x: x[0])]).detach().to(device)
 
 agg_features = STRUCTURAL_VECTOR_LENGTH + features.shape[-1]
-sampling_features = NUM_ATTENTION_HEADS * NUM_OUTPUTS
 num_labels = labels.shape[-1]
 num_features = features.shape[-1]
 
@@ -81,21 +83,21 @@ class StaticStructSamplingModel(nn.Module):
 
 G_train = splits['train']
 G_valid = splits['valid']
-sfe = StaticFeatureEmbedder('id', features).to(device)
-ste = StructuralEmbedder(G_train, STRUCTURAL_VECTOR_LENGTH, distance=1, use_distances=True, device=device)
-mea = MultiEmbedderAggregator([sfe, ste]).to(device)
-sa = SamplingAggregator(mea, agg_features, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
-saa = SamplingAggregator(sa, sampling_features, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS).to(device)
+static_features = StaticFeatureEmbedder('id', features).to(device)
+struct_features = StructuralEmbedder(G_train, STRUCTURAL_VECTOR_LENGTH, distance=1, use_distances=True, device=device)
+node_features = MultiEmbedderAggregator([static_features, struct_features]).to(device)
 
-sa_beef = SamplingAggregator(mea, agg_features, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL).to(device)
-sa_beef2 = SamplingAggregator(sa_beef, sampling_features, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL).to(device)
-sa_beef3 = SamplingAggregator(sa_beef2, sampling_features, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL).to(device)
+# The model has as many sampled, attention residual graph embedding layers as specified
+graph_model = node_features
+graph_features = agg_features
+for d in range(MODEL_DEPTH):
+    graph_model = SamplingAggregator(graph_model, graph_features, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL, include_node=INCLUDE_NODE).to(device)
+    graph_features = max(1, NUM_ATTENTION_HEADS) * NUM_OUTPUTS + (graph_features * INCLUDE_NODE)
 
-#model = StaticStructSamplingModel(sa0, 2 * agg_features * NUM_ATTENTION_HEADS, num_labels).to(device)
-model = StaticStructSamplingModel(sa_beef, sampling_features, num_labels).to(device)
+model = StaticStructSamplingModel(graph_model, graph_features, num_labels).to(device)
 
 # Do the mapping beforehand
-_ = ste.mapping(G_train.vs, G_train)
+_ = struct_features.mapping(G_train.vs, G_train)
 print('Prepared the node structural mapping...')
 
 # Let's do some training
@@ -109,13 +111,16 @@ optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 indices = [node.index for node in G_train.vs]
 from tqdm import tqdm, trange
 from time import time
-for epoch in trange(1, NUM_EPOCHS + 1, desc='Epoch'):
+
+epoch_bar = trange(1, NUM_EPOCHS + 1, desc='Epoch')
+for epoch in epoch_bar:
     model = model.train()
     np.random.shuffle(indices)
     all_batches = [batch for batch in chunks(indices, BATCH_SIZE)]
     losses = []
     start_time = time()
-    for batch_indices in tqdm(all_batches, desc='Batch'):
+    batches_bar = tqdm(all_batches, desc='Batch')
+    for batch_indices in batches_bar:
         batch = G_train.vs[batch_indices]
 
         optimizer.zero_grad()
@@ -124,22 +129,32 @@ for epoch in trange(1, NUM_EPOCHS + 1, desc='Epoch'):
         node_labels = labels[node_indices]
         loss = criterion(output, node_labels)
         losses.append(loss.data.mean().tolist())
+
         loss.backward()
         optimizer.step()
+
+        running_loss = np.mean(losses)
+        batches_bar.set_postfix(loss=running_loss)
     end_time = time()
-    running_loss = np.mean(losses)
+    
+    tqdm.write('Epoch {} took {:.2f} seconds, with a total running loss of {:.3f}.'.format(epoch, end_time - start_time, running_loss))
 
-    tqdm.write('Epoch {} took {} seconds, with a total running loss of {}.'.format(epoch, end_time - start_time, running_loss))
-    if epoch % DISPLAY_EPOCH == 0:
-        model = model.eval()
-        for split in ['valid']:
-            G_split = splits[split]
-            num_instances = len(G_split.vs)
-            pred = model(G_split.vs, G_split)
-            split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).cpu().numpy().round()
-            split_true = labels[G_split.vs['id']].reshape(num_instances, -1).cpu().numpy()
+    model = model.eval()
+    metrics = {}
+    for split in ['valid']:
+        G_split = splits[split]
+        num_instances = len(G_split.vs)
+        node_labels = labels[G_split.vs['id']]
 
-            values = precision_recall_fscore_support(split_pred, split_true, average='micro')
-            values = [split] + list(values)
-            tqdm.write('Split: {} - Precision: {} - Recall: {} - F1-Score: {} - Support: {}\n'.format(*values))
+        pred = model(G_split.vs, G_split)
+        loss = criterion(pred, node_labels)
+        split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).cpu().numpy().round()
+        split_true = node_labels.reshape(num_instances, -1).cpu().numpy()
 
+        values = precision_recall_fscore_support(split_pred, split_true, average='micro')
+        prec, recall, f1, _ = values
+        metrics['{}_f1'.format(split)] = f1
+        metrics['{}_loss'.format(split)] = np.mean(loss.data.mean().tolist())
+        if epoch % DISPLAY_EPOCH == 0 or epoch == NUM_EPOCHS:
+            tqdm.write('Split: {} - Precision: {:.3f} - Recall: {:.3f} - F1-Score: {:.3f}\n'.format(split, prec, recall, f1))
+    epoch_bar.set_postfix(**metrics)
