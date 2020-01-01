@@ -34,7 +34,7 @@ MODEL_DEPTH = 1
 
 TRAINING_PATIENCE = 15
 TRAINING_MINIMUM_CHANGE = 0
-CHECKPOINT_PATH = '{}/checkpoint.pt'.format(DATASET_PATH)
+CHECKPOINT_PATH = '{}/checkpoint-depth-{}.pt'.format(DATASET_PATH, MODEL_DEPTH)
 
 USE_CUDA = True 
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
