@@ -1,6 +1,8 @@
 import os
 import json
 
+import dill
+
 import numpy as np
 import igraph as ig
 
@@ -12,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_recall_fscore_support
 
 from samplers import *
+from learning_utils import EarlyStopping
 
 
 DATASET_PATH = '{}/../PPI'.format(os.path.dirname(os.path.realpath(__file__)))
@@ -22,13 +25,16 @@ HIDDEN_UNITS = 200
 NUM_OUTPUTS = 80
 BATCH_SIZE = 32
 LEARNING_RATE = 0.001
-NUM_EPOCHS = 100
+NUM_EPOCHS = 200
 DISPLAY_EPOCH = 5
 NODES_TO_SAMPLE = 0
 SAMPLING_MODEL = None # log_degree_sampler
 INCLUDE_NODE = True
-
 MODEL_DEPTH = 1
+
+TRAINING_PATIENCE = 15
+TRAINING_MINIMUM_CHANGE = 0
+CHECKPOINT_PATH = '{}/checkpoint.pt'.format(DATASET_PATH)
 
 USE_CUDA = True 
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
@@ -112,6 +118,7 @@ indices = [node.index for node in G_train.vs]
 from tqdm import tqdm, trange
 from time import time
 
+early_stopping = EarlyStopping(TRAINING_PATIENCE, CHECKPOINT_PATH, TRAINING_MINIMUM_CHANGE)
 epoch_bar = trange(1, NUM_EPOCHS + 1, desc='Epoch')
 for epoch in epoch_bar:
     model = model.train()
@@ -153,8 +160,33 @@ for epoch in epoch_bar:
 
         values = precision_recall_fscore_support(split_pred, split_true, average='micro')
         prec, recall, f1, _ = values
+        split_loss = np.mean(loss.data.mean().tolist())
         metrics['{}_f1'.format(split)] = f1
-        metrics['{}_loss'.format(split)] = np.mean(loss.data.mean().tolist())
+        metrics['{}_loss'.format(split)] = split_loss
         if epoch % DISPLAY_EPOCH == 0 or epoch == NUM_EPOCHS:
-            tqdm.write('Split: {} - Precision: {:.3f} - Recall: {:.3f} - F1-Score: {:.3f}\n'.format(split, prec, recall, f1))
+            tqdm.write('Split: {} - Precision: {:.3f} - Recall: {:.3f} - F1-Score: {:.3f} - Loss: {:.3f}\n'.format(split, prec, recall, f1, split_loss))
     epoch_bar.set_postfix(**metrics)
+
+    if early_stopping(metrics['valid_loss'], model):
+        tqdm.write('Early stopping at epoch {}/{} with a best validation loss of {:.3f}.'.format(epoch, NUM_EPOCHS, early_stopping.best_loss))
+        break
+
+# Load the best model and eval on test
+print('Loading the best model to evaluate on the test set.')
+model = torch.load(CHECKPOINT_PATH, pickle_module=dill).eval()
+
+G_test = splits['test']
+num_instances = len(G_test.vs)
+node_labels = labels[G_test.vs['id']]
+
+pred = model(G_test.vs, G_test)
+loss = criterion(pred, node_labels)
+split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).cpu().numpy().round()
+split_true = node_labels.reshape(num_instances, -1).cpu().numpy()
+
+values = precision_recall_fscore_support(split_pred, split_true, average='micro')
+prec, recall, f1, _ = values
+split_loss = np.mean(loss.data.mean().tolist())
+
+print('Best model results on the test set. F1-score: {:.3f} - Loss: {:.3f}'.format(f1, split_loss))
+
