@@ -53,7 +53,8 @@ class SamplingAggregator(nn.Module):
                  attend_over_dense=True,
                  num_attention_heads=5,
                  attention_activation=nn.ELU,
-                 attention_aggregator=attention_concat):
+                 attention_aggregator=attention_concat,
+                 attention_max=nn.Softmax):
         super(SamplingAggregator, self).__init__()
 
         self.embedder = embedder
@@ -92,6 +93,7 @@ class SamplingAggregator(nn.Module):
             attention_heads = nn.Sequential(nn.Linear(attention_input, self.num_attention_heads), attention_activation())
         self.attention_heads = attention_heads
         self.attention_aggregator = attention_aggregator
+        self.attention_max = attention_max(dim=1)
 
     def sample_neighbourhood(self, node, G):
         neighbour_indices = G.neighbors(node)
@@ -120,7 +122,7 @@ class SamplingAggregator(nn.Module):
         nodes = len(tensors)
         nouts = self.output_units
 
-        attention_prb = F.softmax(attention, dim=1)
+        attention_prb = self.attention_max(attention)
         attention_rep = attention_prb.reshape(heads, nodes, 1)
         tensors_rep = tensors.repeat(heads, 1, 1)
         tensors_att = attention_rep * tensors_rep
