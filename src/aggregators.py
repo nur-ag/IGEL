@@ -4,6 +4,8 @@ import torch.nn.functional as F
 
 import numpy as np
 
+from activations import Sparsemax
+
 
 def attention_concat(tensor):
     '''Computes the concatenation of the attention masked tensor'''
@@ -23,6 +25,11 @@ def combine_sum(tensor):
 def combine_mean(tensor):
     '''Computes the mean of the node neighbourhood tensor'''
     return tensor.mean(dim=0)
+
+
+def combine_max(tensor):
+    '''Computes the max of the node neighbourhood tensor'''
+    return tensor.max(dim=0).values
 
 
 class MultiEmbedderAggregator(nn.Module):

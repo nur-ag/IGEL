@@ -1,6 +1,6 @@
 import dill
 import torch
-import numpy as np
+import random
 
 
 class EarlyStopping:
@@ -29,4 +29,36 @@ class EarlyStopping:
     def save_checkpoint(self, model):
         torch.save(model, self.file_path, pickle_module=dill)
 
+
+def chunks(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i+n]
+
+
+def uniformly_random_samples(G, batch_size):
+    indices = [node.index for node in G.vs]
+    random.shuffle(indices)
+    for batch in chunks(indices, batch_size):
+        yield batch
+
+
+def random_bfs_samples(G, batch_size):
+    total_indices = len(G.vs)
+    seen_indices = set()
+    current_batch = []
+    while len(seen_indices) < total_indices:
+        indices = [node.index for node in G.vs 
+                   if node.index not in seen_indices]
+        src = random.choice(indices)
+        for node in G.bfsiter(src):
+            new_index = node.index
+            if new_index in seen_indices:
+                continue
+            seen_indices.add(new_index)
+            current_batch.append(new_index)
+            if len(current_batch) == batch_size:
+                yield current_batch
+                current_batch = []
+    if current_batch:
+        yield current_batch
 
