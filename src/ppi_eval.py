@@ -103,7 +103,7 @@ node_features = MultiEmbedderAggregator([static_features, struct_features]).to(d
 graph_model = node_features
 graph_features = agg_features
 for d in range(MODEL_DEPTH):
-    graph_model = SamplingAggregator(graph_model, graph_features, aggregation=AGGREGATION_FN, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL, include_node=INCLUDE_NODE, number_of_peeks=NUMBER_OF_PEEKS, peeking_units=PEEKING_UNITS).to(device)
+    graph_model = SamplingAggregator(graph_model, graph_features, aggregation=AGGREGATION_FN, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL, include_node=INCLUDE_NODE, number_of_peeks=NUMBER_OF_PEEKS, peeking_units=PEEKING_UNITS, device=device).to(device)
     graph_features = max(1, NUM_ATTENTION_HEADS) * NUM_OUTPUTS + (graph_features * INCLUDE_NODE)
 
 model = StaticStructSamplingModel(graph_model, graph_features, num_labels).to(device)
