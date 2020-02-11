@@ -65,7 +65,8 @@ class SamplingAggregator(nn.Module):
                  attention_max=nn.Softmax,
                  number_of_peeks=2,
                  peeking_units=50,
-                 peeking_activation=nn.Tanh):
+                 peeking_activation=nn.Tanh,
+                 device=torch.device('cpu')):
         super(SamplingAggregator, self).__init__()
 
         self.embedder = embedder
@@ -79,6 +80,7 @@ class SamplingAggregator(nn.Module):
         self.sample_with_replacement = sample_with_replacement
         self.sampling_model = sampling_model
         self.attend_over_dense = attend_over_dense
+        self.device = device
 
         # Attention outputs by every head, or are the sum of head activations
         self.model_attention_outputs = max(1, num_attention_heads if attention_outputs_by_head else 1)
@@ -164,7 +166,10 @@ class SamplingAggregator(nn.Module):
 
     def forward(self, node_seq, G):
         # Prepare the peeking tensor
-        peek_tensor = torch.zeros(len(node_seq), self.peeking_units) if self.peek_dense else None
+        if self.peek_dense:
+            peek_tensor = torch.zeros(len(node_seq), self.peeking_units).to(self.device)
+        else:
+            peek_tensor = None
         
         # For every peeking operation we must sample, aggregate and reconsider
         for peek_index in range(min(1, self.number_of_peeks)):
