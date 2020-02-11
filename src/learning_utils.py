@@ -62,3 +62,28 @@ def random_bfs_samples(G, batch_size):
     if current_batch:
         yield current_batch
 
+
+def random_walk_samples(G, batch_size):
+    total_indices = len(G.vs)
+    indices = [node.index for node in G.vs]
+    current_batch = [random.choice(indices)]
+    seen_indices = set(current_batch)
+    while len(seen_indices) < total_indices:
+        latest_neighs = G.neighbors(current_batch[-1])
+        neighs_left = [n for n in latest_neighs if n not in seen_indices]
+        if len(current_batch) == batch_size:
+            yield current_batch
+            current_batch = []
+        if not neighs_left or not current_batch:
+            indices = [i for i in indices if i not in seen_indices]
+            random_node = random.choice(indices)
+            seen_indices.add(random_node)
+            current_batch.append(random_node)
+        else:
+            random_neigh = random.choice(neighs_left)
+            seen_indices.add(random_neigh)
+            current_batch.append(random_neigh)
+    if current_batch:
+        yield current_batch
+
+

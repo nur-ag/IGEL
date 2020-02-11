@@ -16,7 +16,7 @@ from sklearn.metrics import precision_recall_fscore_support
 from samplers import *
 from embedders import *
 from aggregators import *
-from learning_utils import EarlyStopping, uniformly_random_samples, random_bfs_samples
+from learning_utils import EarlyStopping, uniformly_random_samples, random_bfs_samples, random_walk_samples
 
 
 DATASET_PATH = '{}/../PPI'.format(os.path.dirname(os.path.realpath(__file__)))
@@ -32,8 +32,12 @@ DISPLAY_EPOCH = 3
 NODES_TO_SAMPLE = 0
 SAMPLING_MODEL = None # log_degree_sampler
 INCLUDE_NODE = True
-MODEL_DEPTH = 4
-AGGREGATION_FN = combine_mean
+MODEL_DEPTH = 3
+AGGREGATION_FN = combine_max
+NUMBER_OF_PEEKS = 2
+PEEKING_UNITS = 300
+
+BATCH_SAMPLES_FN = random_walk_samples
 
 TRAINING_PATIENCE = 20
 TRAINING_MINIMUM_CHANGE = 0
@@ -99,7 +103,7 @@ node_features = MultiEmbedderAggregator([static_features, struct_features]).to(d
 graph_model = node_features
 graph_features = agg_features
 for d in range(MODEL_DEPTH):
-    graph_model = SamplingAggregator(graph_model, graph_features, aggregation=AGGREGATION_FN, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL, include_node=INCLUDE_NODE).to(device)
+    graph_model = SamplingAggregator(graph_model, graph_features, aggregation=AGGREGATION_FN, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL, include_node=INCLUDE_NODE, number_of_peeks=NUMBER_OF_PEEKS, peeking_units=PEEKING_UNITS).to(device)
     graph_features = max(1, NUM_ATTENTION_HEADS) * NUM_OUTPUTS + (graph_features * INCLUDE_NODE)
 
 model = StaticStructSamplingModel(graph_model, graph_features, num_labels).to(device)
@@ -118,8 +122,7 @@ from time import time
 early_stopping = EarlyStopping(TRAINING_PATIENCE, CHECKPOINT_PATH, TRAINING_MINIMUM_CHANGE)
 epoch_bar = trange(1, NUM_EPOCHS + 1, desc='Epoch')
 for epoch in epoch_bar:
-    model = model.train()
-    all_batches = list(random_bfs_samples(G_train, BATCH_SIZE))
+    all_batches = list(BATCH_SAMPLES_FN(G_train, BATCH_SIZE))
     losses = []
     start_time = time()
     batches_bar = tqdm(all_batches, desc='Batch')
@@ -130,7 +133,7 @@ for epoch in epoch_bar:
         node_indices = batch['id']
         node_labels = labels[node_indices]
         loss = criterion(output, node_labels)
-        losses.append(loss.data.mean().tolist())
+        losses.append(loss.data.detach().mean().item())
 
         loss.backward()
         optimizer.step()
@@ -139,31 +142,30 @@ for epoch in epoch_bar:
     end_time = time()
     
     tqdm.write('Epoch {} took {:.2f} seconds, with a total running loss of {:.3f}.'.format(epoch, end_time - start_time, running_loss))
+    with torch.no_grad():
+        metrics = {}
+        for split in ['valid']:
+            G_split = splits[split]
+            num_instances = len(G_split.vs)
+            node_labels = labels[G_split.vs['id']]
 
-    model = model.eval()
-    metrics = {}
-    for split in ['valid']:
-        G_split = splits[split]
-        num_instances = len(G_split.vs)
-        node_labels = labels[G_split.vs['id']]
+            pred = model(G_split.vs, G_split)
+            loss = criterion(pred, node_labels)
+            split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).cpu().numpy().round()
+            split_true = node_labels.reshape(num_instances, -1).cpu().numpy()
 
-        pred = model(G_split.vs, G_split)
-        loss = criterion(pred, node_labels)
-        split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).cpu().numpy().round()
-        split_true = node_labels.reshape(num_instances, -1).cpu().numpy()
+            values = precision_recall_fscore_support(split_pred, split_true, average='micro')
+            prec, recall, f1, _ = values
+            split_loss = np.mean(loss.data.mean().tolist())
+            metrics['{}_f1'.format(split)] = f1
+            metrics['{}_loss'.format(split)] = split_loss
+            if epoch % DISPLAY_EPOCH == 0 or epoch == NUM_EPOCHS:
+                tqdm.write('Split: {} - Precision: {:.3f} - Recall: {:.3f} - F1-Score: {:.3f} - Loss: {:.3f}\n'.format(split, prec, recall, f1, split_loss))
+        epoch_bar.set_postfix(**metrics)
 
-        values = precision_recall_fscore_support(split_pred, split_true, average='micro')
-        prec, recall, f1, _ = values
-        split_loss = np.mean(loss.data.mean().tolist())
-        metrics['{}_f1'.format(split)] = f1
-        metrics['{}_loss'.format(split)] = split_loss
-        if epoch % DISPLAY_EPOCH == 0 or epoch == NUM_EPOCHS:
-            tqdm.write('Split: {} - Precision: {:.3f} - Recall: {:.3f} - F1-Score: {:.3f} - Loss: {:.3f}\n'.format(split, prec, recall, f1, split_loss))
-    epoch_bar.set_postfix(**metrics)
-
-    if early_stopping(metrics['valid_loss'], model):
-        tqdm.write('Early stopping at epoch {}/{} with a best validation loss of {:.3f}.'.format(epoch, NUM_EPOCHS, early_stopping.best_loss))
-        break
+        if early_stopping(metrics['valid_loss'], model):
+            tqdm.write('Early stopping at epoch {}/{} with a best validation loss of {:.3f}.'.format(epoch, NUM_EPOCHS, early_stopping.best_loss))
+            break
 
 # Load the best model and eval on test
 print('Loading the best model to evaluate on the test set.')
