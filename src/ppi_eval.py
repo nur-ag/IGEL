@@ -24,20 +24,22 @@ STRUCTURAL_VECTOR_LENGTH = 30
 NUM_ATTENTION_HEADS = 8
 NUM_HIDDEN = 1
 HIDDEN_UNITS = 200
-NUM_OUTPUTS = 80
-BATCH_SIZE = 32
+NUM_OUTPUTS = 120
+BATCH_SIZE = 1024
 LEARNING_RATE = 0.001
 NUM_EPOCHS = 200
 DISPLAY_EPOCH = 3
 NODES_TO_SAMPLE = 0
 SAMPLING_MODEL = None # log_degree_sampler
 INCLUDE_NODE = True
-MODEL_DEPTH = 3
+MODEL_DEPTH = 4
 AGGREGATION_FN = combine_max
 NUMBER_OF_PEEKS = 2
 PEEKING_UNITS = 300
+ATTENTION_AGG_FN = attention_sum
+ATTENTION_OUTS_PER_HEAD = ATTENTION_AGG_FN == attention_concat
 
-BATCH_SAMPLES_FN = random_walk_samples
+BATCH_SAMPLES_FN = random_bfs_samples
 
 TRAINING_PATIENCE = 20
 TRAINING_MINIMUM_CHANGE = 0
@@ -103,8 +105,8 @@ node_features = MultiEmbedderAggregator([static_features, struct_features]).to(d
 graph_model = node_features
 graph_features = agg_features
 for d in range(MODEL_DEPTH):
-    graph_model = SamplingAggregator(graph_model, graph_features, aggregation=AGGREGATION_FN, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL, include_node=INCLUDE_NODE, number_of_peeks=NUMBER_OF_PEEKS, peeking_units=PEEKING_UNITS, device=device).to(device)
-    graph_features = max(1, NUM_ATTENTION_HEADS) * NUM_OUTPUTS + (graph_features * INCLUDE_NODE)
+    graph_model = SamplingAggregator(graph_model, graph_features, aggregation=AGGREGATION_FN, num_hidden=NUM_HIDDEN, hidden_units=HIDDEN_UNITS, output_units=NUM_OUTPUTS, num_attention_heads=NUM_ATTENTION_HEADS, nodes_to_sample=NODES_TO_SAMPLE, sampling_model=SAMPLING_MODEL, include_node=INCLUDE_NODE, attention_aggregator=ATTENTION_AGG_FN, attention_outputs_by_head=ATTENTION_OUTS_PER_HEAD, number_of_peeks=NUMBER_OF_PEEKS, peeking_units=PEEKING_UNITS, device=device).to(device)
+    graph_features = max(1, NUM_ATTENTION_HEADS if ATTENTION_OUTS_PER_HEAD else 1) * NUM_OUTPUTS + (graph_features * INCLUDE_NODE)
 
 model = StaticStructSamplingModel(graph_model, graph_features, num_labels).to(device)
 
