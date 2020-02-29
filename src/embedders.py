@@ -2,16 +2,18 @@ import igraph as ig
 
 import torch
 import torch.nn as nn
-from collections import Counter
+
+from structural import StructuralMapper
 
 
 class NodeEmbedder(nn.Module):
-    def __init__(self, data, requires_grad=True):
+    def __init__(self, data, node_key='id', requires_grad=True):
         super(NodeEmbedder, self).__init__()
+        self.node_key = node_key
         self.matrix = nn.Parameter(data, requires_grad=requires_grad)
 
     def forward(self, node_seq, G):
-        return self.matrix[node_seq['id']]
+        return self.matrix[node_seq[self.node_key]]
 
 
 class StaticFeatureEmbedder(nn.Module):
@@ -26,62 +28,18 @@ class StaticFeatureEmbedder(nn.Module):
         return tensors
 
 
-class StructuralEmbedder(nn.Module):
+class SimpleStructuralEmbedder(nn.Module):
     def __init__(self, 
-                 G,
-                 num_features,  
-                 distance=1,
-                 use_distances=False,
-                 cache_field='neigh_deg',
+                 matrix_size,
+                 structural_mapper,
                  device=torch.device('cpu')):
-        super(StructuralEmbedder, self).__init__()
-        self.distance = distance
-        self.use_distances = use_distances
-        self.cache_field = cache_field
-        self.max_degree = max(G.degree())
+        super(SimpleStructuralEmbedder, self).__init__()
+        self.structural_mapper = structural_mapper
         self.device = device
-        
-        total_elements = (distance + 1) * self.max_degree
-        structural_data = torch.rand(total_elements + 1, num_features)
-
-        # Degrees that do not appear in the graph are set to 0 
-        # to avoid random values for unseen graphs
-        valid_degrees = {d for d in G.degree()}
-        unseen_degrees = [d for d in range(1, self.max_degree + 1) if d not in valid_degrees]
-        zero_degrees = [r * self.max_degree + d for d in unseen_degrees for r in range(distance + 1)]
-        structural_data[zero_degrees] = 0.0
-        self.matrix = nn.Parameter(structural_data).to(device)
-
-    def compute_mapping(self, node_seq, G):
-        node_indices = [node.index for node in node_seq]
-        neighbours_seq = G.neighborhood(node_indices, order=self.distance)
-        deg_seq = []
-        for node, neighbours in zip(node_seq, neighbours_seq):
-            G_n = G.induced_subgraph(neighbours)
-            deg = G_n.degree()
-            if self.use_distances:
-                sub_n = next(v for v in G_n.vs if v['name'] == node['name'])
-                deg_dist = zip((d[0] for d in G_n.shortest_paths_dijkstra(target=sub_n)), deg)
-                deg = [dist * self.max_degree + deg for (dist, deg) in deg_dist]
-            deg = list(zip(*Counter(deg).most_common()))
-            deg_seq.append(deg)
-        return deg_seq
-
-    def mapping(self, node_seq, G):
-        if self.cache_field not in G.vs.attribute_names():
-            G.vs[self.cache_field] = [None for node in G.vs]
-
-        if node_seq[self.cache_field] and None not in node_seq[self.cache_field]:
-            return node_seq[self.cache_field]
-
-        unmapped = [node for node in node_seq if node[self.cache_field] is None]
-        for node, deg in zip(unmapped, self.compute_mapping(unmapped, G)):
-            node[self.cache_field] = deg
-
-        return node_seq[self.cache_field]
+        self.matrix = nn.Parameter(structural_mapper.mapping_matrix(matrix_size), requires_grad=True).to(device)
 
     def forward(self, node_seq, G):
-        indices, counts = zip(*self.mapping(node_seq, G))
+        indices, counts = zip(*self.structural_mapper.mapping(node_seq, G))
 
         # Determine the torch package to use if we use CUDA or not
         _torch = torch.cuda if self.device.type == 'cuda' else torch
@@ -105,3 +63,66 @@ class StructuralEmbedder(nn.Module):
         output = embed / total_count_vector._values().reshape(batch_size, 1) 
         return output
         
+
+class GatedStructuralEmbedder(nn.Module):
+    def __init__(self, 
+                 matrix_size,
+                 output_size,
+                 num_aggregations,
+                 structural_mapper,
+                 transform_output=True,
+                 count_function='concat_both',
+                 aggregation_function='mean',
+                 device=torch.device('cpu')):
+        super(GatedStructuralEmbedder, self).__init__()
+        self.structural_mapper = structural_mapper
+        self.device = device
+        self.num_aggregations = num_aggregations
+        self.output_size = output_size
+        self.count_function = count_function
+        self.aggregation_function = aggregation_function
+        self.matrix = nn.Parameter(structural_mapper.mapping_matrix(matrix_size), requires_grad=True).to(device)
+        extra_concat_units = count_function.startswith('concat') + count_function.endswith('both')
+        self.gated = nn.GRUCell(matrix_size + extra_concat_units, output_size).to(device)
+        self.output_transform = nn.Linear(output_size, output_size) if transform_output else None
+
+    def compute_counts(self, tensor, counts):
+        if self.count_function is None:
+            return tensor
+        counts_tensor = torch.Tensor(counts, device=self.device).reshape(-1, 1)
+        if self.count_function == 'scale':
+            return tensor * counts_tensor
+        if self.count_function == 'scale_norm':
+            return tensor * (counts_tensor / counts_tensor.sum())
+        if self.count_function == 'concat':
+            return torch.cat([tensor, counts_tensor], axis=1)
+        if self.count_function == 'concat_norm':
+            return torch.cat([tensor, counts_tensor / counts_tensor.sum()], axis=1)
+        if self.count_function == 'concat_both':
+            return torch.cat([tensor, counts_tensor, counts_tensor / counts_tensor.sum()], axis=1)
+        raise ValueError('Invalid counts function "{}"!'.format(self.count_function))
+
+    def compute_aggregation(self, tensor):
+        if self.aggregation_function == 'mean':
+            return tensor.mean(axis=0)
+        if self.aggregation_function == 'max':
+            return tensor.max(axis=0).values
+        if self.aggregation_function == 'sum':
+            return tensor.sum(axis=0)
+        raise ValueError('Invalid aggregation function "{}"!'.format(self.aggregation_function))
+
+    def forward(self, node_seq, G):
+        outputs = []
+        for indices, counts in self.structural_mapper.mapping(node_seq, G):
+            tensor = self.compute_counts(self.matrix[indices, :], counts)
+            indices_size = len(indices)
+            hidden = torch.zeros(self.output_size).to(self.device)
+            for i in range(max(1, self.num_aggregations)):
+                new_hidden = self.gated(tensor, hidden.reshape(1, -1).repeat(indices_size, 1))
+                hidden = self.compute_aggregation(new_hidden)
+            outputs.append(hidden)
+        outputs = torch.stack(outputs)
+        if self.output_transform is not None:
+            outputs = self.output_transform(outputs)
+        return outputs
+

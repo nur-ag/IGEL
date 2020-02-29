@@ -4,24 +4,25 @@ import random
 
 
 class EarlyStopping:
-    def __init__(self, patience, file_path, minimum_change=0):
+    def __init__(self, patience, file_path, minimum_change=0, metric_sign=1):
         self.patience = patience
         self.file_path = file_path
         self.minimum_change = minimum_change
-
+        self.metric_sign = metric_sign
+        
         self.counter = 0
-        self.best_loss = None
+        self.best_metric = None
         self.stopped = False
 
-    def __call__(self, val_loss, model):
-        if self.best_loss is None:
-            self.best_loss = val_loss
+    def __call__(self, metric, model):
+        if self.best_metric is None:
+            self.best_metric = metric
             self.save_checkpoint(model)
-        elif val_loss > self.best_loss - self.minimum_change:
+        elif self.metric_sign * metric > self.metric_sign * (self.best_metric - self.minimum_change):
             self.counter += 1
             self.stopped = self.counter >= self.patience
         else:
-            self.best_loss = val_loss
+            self.best_metric = metric
             self.save_checkpoint(model)
             self.counter = 0
         return self.stopped
@@ -86,4 +87,54 @@ def random_walk_samples(G, batch_size):
     if current_batch:
         yield current_batch
 
+
+def random_walk(node, G, length):
+    last_node = node
+    seen_nodes = 1
+    yield last_node
+    while seen_nodes < length:
+        next_choices = G.neighbors(last_node)
+        last_node = random.choice(next_choices)
+        seen_nodes += 1
+        yield last_node
+
+
+def graph_random_walks(G, 
+                       random_walk_length=80,
+                       batch_size=512, 
+                       node_sampling_fn=uniformly_random_samples,
+                       random_walk_fn=random_walk):
+    node_generator = node_sampling_fn(G, batch_size)
+    for chunk in node_generator:
+        for node in chunk:
+            yield [n for n in random_walk_fn(node, G, random_walk_length)]
+
+def negative_sampling_generator(G, 
+                                random_walk_generator, 
+                                window_size=10, 
+                                negatives_per_positive=10):
+    indices = [node.index for node in G.vs]
+    for walk in random_walk_generator:
+        for i, node in enumerate(walk):
+            lower_start = max(0, i - window_size)
+            upper_end = min(len(walk), i + window_size + 1)
+            for index in range(lower_start, upper_end):
+                yield (node, walk[index], 1)
+                for n in range(negatives_per_positive):
+                    yield (node, random.choice(indices), 0)
+
+def negative_sampling_batcher(ns_generator, batch_size=16384):
+    source_list = []
+    target_list = []
+    labels = []
+    for source, target, label in ns_generator:
+        source_list.append(source)
+        target_list.append(target)
+        labels.append(label)
+        if len(source_list) == batch_size:
+            yield source_list, target_list, labels
+            source_list = []
+            target_list = []
+            labels = []
+    yield source_list, target_list, labels    
 

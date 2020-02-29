@@ -52,6 +52,7 @@ class SamplingAggregator(nn.Module):
                  output_units=20, 
                  num_hidden=1, 
                  activation=nn.ReLU,
+                 initialization=nn.init.xavier_uniform_,
                  aggregation=combine_sum,
                  include_node=False,
                  nodes_to_sample=0,
@@ -63,9 +64,9 @@ class SamplingAggregator(nn.Module):
                  attention_aggregator=attention_concat,
                  attention_outputs_by_head=True,
                  attention_max=nn.Softmax,
+                 attention_initialization=nn.init.xavier_uniform_,
                  number_of_peeks=2,
                  peeking_units=50,
-                 peeking_activation=nn.Tanh,
                  device=torch.device('cpu')):
         super(SamplingAggregator, self).__init__()
 
@@ -90,11 +91,10 @@ class SamplingAggregator(nn.Module):
         self.peeking_units = peeking_units
         self.number_of_peeks = number_of_peeks
         if number_of_peeks < 1 or peeking_units < 1:
-            self.peek_dense = None
+            self.peek_cell = None
         else:
-            peeking_layer = nn.Linear(self.model_output_units, self.peeking_units)
-            self.peek_dense = nn.Sequential(peeking_layer, peeking_activation())
-        num_peeking_inputs = 0 if self.peek_dense is None else self.peeking_units
+            self.peek_cell = nn.GRUCell(self.model_output_units, self.peeking_units)
+        num_peeking_inputs = 0 if self.peek_cell is None else self.peeking_units
 
         # Normal DNN layers over the source
         layers = []
@@ -110,6 +110,11 @@ class SamplingAggregator(nn.Module):
             layers.append(nn.Linear(self.hidden_units, self.output_units))
             layers.append(activation())
 
+        for layer in layers:
+            weight = getattr(layer, 'weight', None)
+            if weight is not None:
+                initialization(weight)
+
         self.dense = nn.Sequential(*layers)
 
         # Attention over the inputs to compute
@@ -117,7 +122,9 @@ class SamplingAggregator(nn.Module):
         attention_heads = None
         attention_input = self.output_units if self.attend_over_dense else self.input_units * 2 + num_peeking_inputs
         if num_attention_heads > 0:
-            attention_heads = nn.Sequential(nn.Linear(attention_input, self.num_attention_heads), attention_activation())
+            attention_layer = nn.Linear(attention_input, self.num_attention_heads)
+            attention_initialization(attention_layer.weight)
+            attention_heads = nn.Sequential(attention_layer, attention_activation())
         self.attention_heads = attention_heads
         self.attention_aggregator = attention_aggregator
         self.attention_outputs_by_head = attention_outputs_by_head
@@ -166,12 +173,13 @@ class SamplingAggregator(nn.Module):
 
     def forward(self, node_seq, G):
         # Prepare the peeking tensor
-        if self.peek_dense:
+        if self.peek_cell is not None:
             peek_tensor = torch.zeros(len(node_seq), self.peeking_units).to(self.device)
         else:
             peek_tensor = None
         
         # For every peeking operation we must sample, aggregate and reconsider
+        node_tensors = []
         for peek_index in range(min(1, self.number_of_peeks)):
             # Compute the whole set of nodes to encode and the neighbours of every node
             complete_set, node_neighbours = self.get_node_set(node_seq, G)
@@ -210,6 +218,7 @@ class SamplingAggregator(nn.Module):
                 node_tensors.append(node_output)
             # Update peek tensor if we have a peeking model and are still peeking
             if peek_tensor is not None and peek_index < self.number_of_peeks - 1:
-                peek_tensor = peek_tensor + self.peek_dense(node_output)
+                current_tensors = torch.stack(node_tensors)
+                peek_tensor = self.peek_cell(current_tensors, peek_tensor)
         return torch.stack(node_tensors)
 
