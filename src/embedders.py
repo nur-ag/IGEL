@@ -84,12 +84,12 @@ class GatedStructuralEmbedder(nn.Module):
         self.matrix = nn.Parameter(structural_mapper.mapping_matrix(matrix_size), requires_grad=True).to(device)
         extra_concat_units = count_function.startswith('concat') + count_function.endswith('both')
         self.gated = nn.GRUCell(matrix_size + extra_concat_units, output_size).to(device)
-        self.output_transform = nn.Linear(output_size, output_size) if transform_output else None
+        self.output_transform = nn.Linear(output_size, output_size).to(device) if transform_output else None
 
     def compute_counts(self, tensor, counts):
         if self.count_function is None:
             return tensor
-        counts_tensor = torch.Tensor(counts, device=self.device).reshape(-1, 1)
+        counts_tensor = torch.Tensor(counts).to(self.device).reshape(-1, 1)
         if self.count_function == 'scale':
             return tensor * counts_tensor
         if self.count_function == 'scale_norm':
