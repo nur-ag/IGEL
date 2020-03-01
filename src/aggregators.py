@@ -50,6 +50,8 @@ class SamplingAggregator(nn.Module):
                  input_units, 
                  hidden_units=100, 
                  output_units=20, 
+                 node_dropout=0.2,
+                 dropout_on_hidden=True,
                  num_hidden=1, 
                  activation=nn.ReLU,
                  initialization=nn.init.xavier_uniform_,
@@ -67,6 +69,7 @@ class SamplingAggregator(nn.Module):
                  attention_initialization=nn.init.xavier_uniform_,
                  number_of_peeks=2,
                  peeking_units=50,
+                 peeking_dropout=0.2,
                  device=torch.device('cpu')):
         super(SamplingAggregator, self).__init__()
 
@@ -76,6 +79,8 @@ class SamplingAggregator(nn.Module):
         self.output_units = output_units if output_units > 0 else input_units
         self.hidden_units = hidden_units if num_hidden > 0 else self.output_units
         self.num_hidden = num_hidden
+        self.node_dropout = node_dropout
+        self.dropout_on_hidden = dropout_on_hidden
         self.include_node = include_node
         self.nodes_to_sample = nodes_to_sample
         self.sample_with_replacement = sample_with_replacement
@@ -90,10 +95,13 @@ class SamplingAggregator(nn.Module):
         # Peeking mechanism to review evidence from neighbourhood
         self.peeking_units = peeking_units
         self.number_of_peeks = number_of_peeks
+        self.peeking_dropout = peeking_dropout
         if number_of_peeks < 1 or peeking_units < 1:
             self.peek_cell = None
         else:
             self.peek_cell = nn.GRUCell(self.model_output_units, self.peeking_units)
+            if peeking_dropout > 0.0:
+                self.peek_cell = nn.Sequential(self.peek_cell, nn.Dropout(peeking_dropout))
         num_peeking_inputs = 0 if self.peek_cell is None else self.peeking_units
 
         # Normal DNN layers over the source
@@ -101,14 +109,20 @@ class SamplingAggregator(nn.Module):
         if output_units > 0:
             layers.append(nn.Linear(self.input_units * 2 + num_peeking_inputs, self.hidden_units))
             layers.append(activation())
+            if node_dropout > 0.0 and (dropout_on_hidden or num_hidden == 0):
+                layers.append(nn.Dropout(node_dropout))
 
         for i in range(num_hidden - 1):
             layers.append(nn.Linear(self.hidden_units, self.hidden_units))
             layers.append(activation())
+            if node_dropout > 0.0 and dropout_on_hidden:
+                layers.append(nn.Dropout(node_dropout))
 
         if num_hidden > 0:
             layers.append(nn.Linear(self.hidden_units, self.output_units))
             layers.append(activation())
+            if node_dropout > 0.0:
+                layers.append(nn.Dropout(node_dropout))
 
         for layer in layers:
             weight = getattr(layer, 'weight', None)

@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 
 import dill
 
@@ -11,12 +12,13 @@ import torch.nn as nn
 import torch.optim as optim
 
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import precision_recall_fscore_support
 
 from samplers import *
 from embedders import *
 from aggregators import *
-from learning_utils import EarlyStopping, uniformly_random_samples, random_bfs_samples, random_walk_samples, graph_random_walks
+from learning import EarlyStopping, GraphNetworkTrainer
+from models import NodeClassificationModel, NegativeSamplingModel
+from batching import uniformly_random_samples, random_bfs_samples, random_walk_samples, graph_random_walks, negative_sampling_generator, negative_sampling_batcher
 
 
 DATASET_PATH = '{}/../data/PPI'.format(os.path.dirname(os.path.realpath(__file__)))
@@ -29,8 +31,8 @@ NUM_EPOCHS = 200
 DISPLAY_EPOCH = 3
 
 STRUCTURAL_VECTOR_LENGTH = 100
-STRUCTURAL_GATES_LENGTH = 200
-STRUCTURAL_GATES_STEPS = 3
+STRUCTURAL_GATES_LENGTH = 0
+STRUCTURAL_GATES_STEPS = 4
 STRUCTURAL_DISTANCE = 1
 STRUCTURAL_TRANSFORM_OUTPUT = True
 STRUCTURAL_COUNTS_FUNCTION = 'concat_both'
@@ -38,7 +40,7 @@ STRUCTURAL_AGGREGATOR_FUNCTION = 'mean'
 STRUCTURAL_USE_DISTANCE_SYMBOLS = True
 
 NUM_HIDDEN = 1
-HIDDEN_UNITS = 200
+HIDDEN_UNITS = 256
 NUM_OUTPUTS = 256
 INCLUDE_NODE = True
 MODEL_DEPTH = 0
@@ -58,17 +60,17 @@ ATTENTION_LAST_LAYER_OUTS_PER_HEAD = ATTENTION_LAST_LAYER_AGG_FN == attention_co
 
 BATCH_SAMPLES_FN = random_bfs_samples
 
-TRAINING_PATIENCE = 20
-TRAINING_MINIMUM_CHANGE = 0
-CHECKPOINT_PATH = '{}/checkpoint-depth-{}.pt'.format(DATASET_PATH, MODEL_DEPTH)
-TRAINING_PATIENCE_METRIC = 'valid_f1'
-TRAINING_SIGN = 1 if TRAINING_MINIMUM_CHANGE == 'val_loss' else -1
-
-RANDOM_WALK_LENGTH = 0
+RANDOM_WALK_LENGTH = 80
 WINDOW_SIZE = 10
 NEGATIVES_PER_POSITIVE = 10
 
 TRAIN_NEGATIVE_SAMPLING = RANDOM_WALK_LENGTH > 0
+
+TRAINING_PATIENCE = 20
+TRAINING_MINIMUM_CHANGE = 0
+CHECKPOINT_PATH = '{}/checkpoint-{}-depth-{}.pt'.format(DATASET_PATH, 'unsup' if TRAIN_NEGATIVE_SAMPLING else 'sup', MODEL_DEPTH)
+TRAINING_PATIENCE_METRIC = 'valid_f1'
+TRAINING_SIGN = 1 if TRAINING_MINIMUM_CHANGE == 'val_loss' else -1
 
 USE_CUDA = True 
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
@@ -108,40 +110,9 @@ num_features = features.shape[-1]
 
 print('Loaded features and labels!')
 
-# Define the models
-class GraphOutputModel(nn.Module):
-    def __init__(self, graph_model, graph_outs, num_labels):
-        super(GraphOutputModel, self).__init__()
-        self.graph_model = graph_model
-        self.out = nn.Linear(graph_outs, num_labels)
-
-    def forward(self, node_seq, G):
-        g_out = self.graph_model(node_seq, G)
-        out = self.out(g_out)
-        return out
-
-class NegativeSamplingModel(nn.Module):
-    def __init__(self, graph_model):
-        super(NegativeSamplingModel, self).__init__()
-        self.graph_model = graph_model
-        self.out = nn.Linear(1, 1)
-
-    def forward(self, sources, targets, G):
-        all_nodes = sorted({n for n in sources + targets})
-        nodes_mapping = {n: i for i, n in enumerate(all_nodes)}
-        as_node_seq = G.vs[all_nodes]
-        tensor = self.graph_model(as_node_seq, G)
-        source_indices = [nodes_mapping[n] for n in sources]
-        target_indices = [nodes_mapping[n] for n in targets]
-        sources_tensor = tensor[source_indices, :]
-        targets_tensor = tensor[target_indices, :]
-        product_tensor = (sources_tensor * targets_tensor).sum(axis=1)
-        out = self.out(product_tensor.reshape(-1, 1))
-        return out
-
-
 G_train = splits['train']
 G_valid = splits['valid']
+G_test = splits['test']
 structural_mapper = StructuralMapper(G_train, distance=STRUCTURAL_DISTANCE, use_distances=STRUCTURAL_USE_DISTANCE_SYMBOLS)
 static_features = StaticFeatureEmbedder('id', features).to(device)
 if STRUCTURAL_GATES_STEPS <= 0 or STRUCTURAL_GATES_LENGTH <= 0:
@@ -163,79 +134,24 @@ for d in range(MODEL_DEPTH):
 if TRAIN_NEGATIVE_SAMPLING:
     model = NegativeSamplingModel(graph_model).to(device)
 else:
-    model = GraphOutputModel(graph_model, graph_features, num_labels).to(device)
+    model = NodeClassificationModel(graph_model, graph_features, num_labels).to(device)
 
 # Let's do some training
+def batch_iterator_fn():
+    if TRAIN_NEGATIVE_SAMPLING:
+        batch_gen = BATCH_SAMPLES_FN(G_train, BATCH_SIZE)
+        ns_gen = negative_sampling_generator(G_train, batch_gen, WINDOW_SIZE, NEGATIVES_PER_POSITIVE)
+        pair_labels = negative_sampling_batcher(ns_gen, BATCH_SIZE)
+        all_batches = ((pair, torch.Tensor(label).to(device).reshape(-1, 1)) for pair, label in pair_labels)
+    else:
+        all_batches = [(G_train.vs[batch], labels[G_train.vs[batch]['id']]) for batch in BATCH_SAMPLES_FN(G_train, BATCH_SIZE)]
+    return all_batches
+
 criterion = nn.MultiLabelSoftMarginLoss()
 optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+early_stopping = EarlyStopping(TRAINING_PATIENCE, CHECKPOINT_PATH, TRAINING_PATIENCE_METRIC, TRAINING_MINIMUM_CHANGE, TRAINING_SIGN)
 
-from tqdm import tqdm, trange
-from time import time
-
-early_stopping = EarlyStopping(TRAINING_PATIENCE, CHECKPOINT_PATH, TRAINING_MINIMUM_CHANGE, TRAINING_SIGN)
-epoch_bar = trange(1, NUM_EPOCHS + 1, desc='Epoch')
-for epoch in epoch_bar:
-    all_batches = list(BATCH_SAMPLES_FN(G_train, BATCH_SIZE))
-    losses = []
-    start_time = time()
-    batches_bar = tqdm(all_batches, desc='Batch')
-    for batch_indices in batches_bar:
-        batch = G_train.vs[batch_indices]
-        optimizer.zero_grad()
-        output = model(batch, G_train)
-        node_indices = batch['id']
-        node_labels = labels[node_indices]
-        loss = criterion(output, node_labels)
-        losses.append(loss.data.detach().mean().item())
-
-        loss.backward()
-        optimizer.step()
-        running_loss = np.mean(losses)
-        batches_bar.set_postfix(loss=running_loss)
-    end_time = time()
-    
-    tqdm.write('Epoch {} took {:.2f} seconds, with a total running loss of {:.3f}.'.format(epoch, end_time - start_time, running_loss))
-    with torch.no_grad():
-        metrics = {}
-        for split in ['valid']:
-            G_split = splits[split]
-            num_instances = len(G_split.vs)
-            node_labels = labels[G_split.vs['id']]
-
-            pred = model(G_split.vs, G_split)
-            loss = criterion(pred, node_labels)
-            split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).cpu().numpy().round()
-            split_true = node_labels.reshape(num_instances, -1).cpu().numpy()
-
-            values = precision_recall_fscore_support(split_pred, split_true, average='micro')
-            prec, recall, f1, _ = values
-            split_loss = np.mean(loss.data.mean().tolist())
-            metrics['{}_f1'.format(split)] = f1
-            metrics['{}_loss'.format(split)] = split_loss
-            if epoch % DISPLAY_EPOCH == 0 or epoch == NUM_EPOCHS:
-                tqdm.write('Split: {} - Precision: {:.3f} - Recall: {:.3f} - F1-Score: {:.3f} - Loss: {:.3f}\n'.format(split, prec, recall, f1, split_loss))
-        epoch_bar.set_postfix(**metrics)
-
-        if early_stopping(metrics[TRAINING_PATIENCE_METRIC], model):
-            tqdm.write('Early stopping at epoch {}/{} with a best validation score of {:.3f}.'.format(epoch, NUM_EPOCHS, early_stopping.best_metric))
-            break
-
-# Load the best model and eval on test
-print('Loading the best model to evaluate on the test set.')
-model = torch.load(CHECKPOINT_PATH, pickle_module=dill).eval()
-
-G_test = splits['test']
-num_instances = len(G_test.vs)
-node_labels = labels[G_test.vs['id']]
-
-pred = model(G_test.vs, G_test)
-loss = criterion(pred, node_labels)
-split_pred = torch.sigmoid(pred).detach().reshape(num_instances, -1).cpu().numpy().round()
-split_true = node_labels.reshape(num_instances, -1).cpu().numpy()
-
-values = precision_recall_fscore_support(split_pred, split_true, average='micro')
-prec, recall, f1, _ = values
-split_loss = np.mean(loss.data.mean().tolist())
-
-print('Best model results on the test set. F1-score: {:.3f} - Loss: {:.3f}'.format(f1, split_loss))
-
+validation_data = None if TRAIN_NEGATIVE_SAMPLING else (G_valid.vs, labels[G_valid.vs['id']], G_valid)
+test_data = None if TRAIN_NEGATIVE_SAMPLING else (G_test.vs, labels[G_test.vs['id']], G_test)
+trainer = GraphNetworkTrainer(model, optimizer, criterion, display_epochs=DISPLAY_EPOCH, early_stopping=early_stopping)
+trainer.fit(batch_iterator_fn, G_train, NUM_EPOCHS, validation_data=validation_data, test_data=test_data)

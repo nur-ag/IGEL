@@ -1,34 +1,4 @@
-import dill
-import torch
 import random
-
-
-class EarlyStopping:
-    def __init__(self, patience, file_path, minimum_change=0, metric_sign=1):
-        self.patience = patience
-        self.file_path = file_path
-        self.minimum_change = minimum_change
-        self.metric_sign = metric_sign
-        
-        self.counter = 0
-        self.best_metric = None
-        self.stopped = False
-
-    def __call__(self, metric, model):
-        if self.best_metric is None:
-            self.best_metric = metric
-            self.save_checkpoint(model)
-        elif self.metric_sign * metric > self.metric_sign * (self.best_metric - self.minimum_change):
-            self.counter += 1
-            self.stopped = self.counter >= self.patience
-        else:
-            self.best_metric = metric
-            self.save_checkpoint(model)
-            self.counter = 0
-        return self.stopped
-
-    def save_checkpoint(self, model):
-        torch.save(model, self.file_path, pickle_module=dill)
 
 
 def chunks(l, n):
@@ -119,11 +89,11 @@ def negative_sampling_generator(G,
             lower_start = max(0, i - window_size)
             upper_end = min(len(walk), i + window_size + 1)
             for index in range(lower_start, upper_end):
-                yield (node, walk[index], 1)
+                yield node, walk[index], 1
                 for n in range(negatives_per_positive):
-                    yield (node, random.choice(indices), 0)
+                    yield node, random.choice(indices), 0
 
-def negative_sampling_batcher(ns_generator, batch_size=16384):
+def negative_sampling_batcher(ns_generator, batch_size=512, batch_precache_scale=2048):
     source_list = []
     target_list = []
     labels = []
@@ -131,10 +101,18 @@ def negative_sampling_batcher(ns_generator, batch_size=16384):
         source_list.append(source)
         target_list.append(target)
         labels.append(label)
-        if len(source_list) == batch_size:
-            yield source_list, target_list, labels
+        if len(source_list) == batch_size * batch_precache_scale:
+            for subset in range(batch_precache_scale):
+                source_list_subset = source_list[subset::batch_precache_scale]
+                target_list_subset = target_list[subset::batch_precache_scale]
+                labels_subset = labels[subset::batch_precache_scale]
+                yield (source_list_subset, target_list_subset), labels_subset
             source_list = []
             target_list = []
             labels = []
-    yield source_list, target_list, labels    
-
+    for subset in range(batch_precache_scale):
+        source_list_subset = source_list[subset::batch_precache_scale]
+        target_list_subset = target_list[subset::batch_precache_scale]
+        labels_subset = labels[subset::batch_precache_scale]
+        yield (source_list_subset, target_list_subset), labels_subset
+                
