@@ -27,12 +27,12 @@ DEFAULT_DEVICE = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
 
 LINK_PREDICTION_OUTPUTS = 1
 
-NEGATIVE_SAMPLING_OPTIONS = NegativeSamplingParameters(80, 10, 10)
+NEGATIVE_SAMPLING_OPTIONS = NegativeSamplingParameters(120, 10, 20)
 
-SIMPLE_MODEL_OPTIONS = IGELParameters(model_type='simple', vector_length=100, encoding_distance=2, use_distance_labels=True, counts_transform='log', neg_sampling_parameters=NEGATIVE_SAMPLING_OPTIONS)
-GATED_MODEL_OPTIONS = IGELParameters(model_type='gated', vector_length=100, encoding_distance=2, use_distance_labels=True, gates_length=64, gates_steps=4, transform_output=True, counts_function='concat_both', aggregator_function='mean', counts_transform='log', neg_sampling_parameters=NEGATIVE_SAMPLING_OPTIONS)
+SIMPLE_MODEL_OPTIONS = IGELParameters(model_type='simple', vector_length=300, encoding_distance=2, use_distance_labels=True, counts_transform='log', neg_sampling_parameters=NEGATIVE_SAMPLING_OPTIONS)
+GATED_MODEL_OPTIONS = IGELParameters(model_type='gated', vector_length=300, encoding_distance=2, use_distance_labels=True, gates_length=64, gates_steps=4, transform_output=True, counts_function='concat_both', aggregator_function='mean', counts_transform='log', neg_sampling_parameters=NEGATIVE_SAMPLING_OPTIONS)
 
-TRAINING_OPTIONS = TrainingParameters(batch_size=65536, learning_rate=0.001, weight_decay=0.0, epochs=5, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
+TRAINING_OPTIONS = TrainingParameters(batch_size=500000, learning_rate=0.001, weight_decay=0.0, epochs=5, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
 LP_TRAINING_OPTIONS = TrainingParameters(batch_size=256, learning_rate=0.01, weight_decay=0.0, epochs=500, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
 
 def train_link_prediction(G, edges, labels, structural_model, model_options, training_options, edge_function, device):
@@ -48,7 +48,7 @@ def train_link_prediction(G, edges, labels, structural_model, model_options, tra
                                   problem_type='unsupervised')
     def edge_batch_fn():
         edge_labels = zip(edges, labels)
-        as_chunks = chunks(edge_labels, link_prediction_batch_size)
+        as_chunks = chunks(edge_labels, training_options.batch_size)
         for chunk in as_chunks:
             X, y = zip(*chunk)
             src, dst = zip(*X)
