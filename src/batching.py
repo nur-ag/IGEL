@@ -1,29 +1,39 @@
 import random
 
 
-def chunks(l, n):
-    for i in range(0, len(l), n):
-        yield l[i:i+n]
+def chunks(source, chunk_size):
+    current_chunk = []
+    for value in source:
+        current_chunk.append(value)
+        if len(current_chunk) == chunk_size:
+            yield current_chunk
+            current_chunk = []
+    if current_chunk:
+        yield current_chunk
 
 
-def uniformly_random_samples(G, batch_size):
-    indices = [node.index for node in G.vs]
+def uniformly_random_samples(G, split_indices, batch_size):
+    indices = [n.index for n in split_indices]
     random.shuffle(indices)
     for batch in chunks(indices, batch_size):
         yield batch
 
 
-def random_bfs_samples(G, batch_size):
+def random_bfs_samples(G, split_indices, batch_size):
+    indices = [n.index for n in split_indices]
+    indices_in_split = set(indices)
     total_indices = len(G.vs)
     seen_indices = set()
     current_batch = []
     while len(seen_indices) < total_indices:
-        indices = [node.index for node in G.vs 
-                   if node.index not in seen_indices]
+        indices = [node.index for node in split_indices
+                   if node not in seen_indices]
+        if not indices:
+            break
         src = random.choice(indices)
         for node in G.bfsiter(src):
             new_index = node.index
-            if new_index in seen_indices:
+            if new_index in seen_indices or new_index not in indices_in_split:
                 continue
             seen_indices.add(new_index)
             current_batch.append(new_index)
@@ -34,19 +44,22 @@ def random_bfs_samples(G, batch_size):
         yield current_batch
 
 
-def random_walk_samples(G, batch_size):
+def random_walk_samples(G, split_indices, batch_size):
+    indices = [n.index for n in split_indices]
+    indices_in_split = set(indices)
     total_indices = len(G.vs)
-    indices = [node.index for node in G.vs]
     current_batch = [random.choice(indices)]
     seen_indices = set(current_batch)
     while len(seen_indices) < total_indices:
         latest_neighs = G.neighbors(current_batch[-1])
-        neighs_left = [n for n in latest_neighs if n not in seen_indices]
+        neighs_left = [n for n in latest_neighs if n not in seen_indices and n in indices_in_split]
         if len(current_batch) == batch_size:
             yield current_batch
             current_batch = []
         if not neighs_left or not current_batch:
             indices = [i for i in indices if i not in seen_indices]
+            if not indices:
+                break
             random_node = random.choice(indices)
             seen_indices.add(random_node)
             current_batch.append(random_node)
@@ -74,7 +87,7 @@ def graph_random_walks(G,
                        batch_size=512, 
                        node_sampling_fn=uniformly_random_samples,
                        random_walk_fn=random_walk):
-    node_generator = node_sampling_fn(G, batch_size)
+    node_generator = node_sampling_fn(G, G.vs, batch_size)
     for chunk in node_generator:
         for node in chunk:
             yield [n for n in random_walk_fn(node, G, random_walk_length)]
@@ -89,6 +102,8 @@ def negative_sampling_generator(G,
             lower_start = max(0, i - window_size)
             upper_end = min(len(walk), i + window_size + 1)
             for index in range(lower_start, upper_end):
+                if index == i:
+                    continue
                 yield node, walk[index], 1
                 for n in range(negatives_per_positive):
                     yield node, random.choice(indices), 0
@@ -116,3 +131,9 @@ def negative_sampling_batcher(ns_generator, batch_size=512, batch_precache_scale
         labels_subset = labels[subset::batch_precache_scale]
         yield (source_list_subset, target_list_subset), labels_subset
                 
+
+batch_dictionary_mapping = {
+    'uniform': uniformly_random_samples,
+    'bfs': random_bfs_samples,
+    'random_walk': random_walk_samples
+}

@@ -1,3 +1,5 @@
+import math
+
 import igraph as ig
 
 import torch
@@ -28,18 +30,33 @@ class StaticFeatureEmbedder(nn.Module):
         return tensors
 
 
+def count_transform(counts, function):
+    if function == 'identity':
+        return counts
+    if function == 'log':
+        return [math.log(c + 1, 2) for c in counts]
+    if function == 'sqrt':
+        return [math.sqrt(c) for c in counts]
+    raise ValueError('Unknown counts transform "{}"'.format(function))
+
+
 class SimpleStructuralEmbedder(nn.Module):
     def __init__(self, 
-                 matrix_size,
+                 vector_size,
                  structural_mapper,
+                 counts_transform='log',
                  device=torch.device('cpu')):
         super(SimpleStructuralEmbedder, self).__init__()
         self.structural_mapper = structural_mapper
+        self.counts_transform = counts_transform
         self.device = device
-        self.matrix = nn.Parameter(structural_mapper.mapping_matrix(matrix_size), requires_grad=True).to(device)
+        self.matrix = nn.Parameter(structural_mapper.mapping_matrix(vector_size), requires_grad=True).to(device)
 
     def forward(self, node_seq, G):
         indices, counts = zip(*self.structural_mapper.mapping(node_seq, G))
+
+        # Apply the counts function
+        counts = [count_transform(cnt, self.counts_transform) for cnt in counts]
 
         # Determine the torch package to use if we use CUDA or not
         _torch = torch.cuda if self.device.type == 'cuda' else torch
@@ -66,24 +83,26 @@ class SimpleStructuralEmbedder(nn.Module):
 
 class GatedStructuralEmbedder(nn.Module):
     def __init__(self, 
-                 matrix_size,
+                 vector_size,
                  output_size,
                  num_aggregations,
                  structural_mapper,
                  transform_output=True,
                  count_function='concat_both',
                  aggregation_function='mean',
+                 counts_transform='log',
                  device=torch.device('cpu')):
         super(GatedStructuralEmbedder, self).__init__()
         self.structural_mapper = structural_mapper
+        self.counts_transform = counts_transform
         self.device = device
         self.num_aggregations = num_aggregations
         self.output_size = output_size
         self.count_function = count_function
         self.aggregation_function = aggregation_function
-        self.matrix = nn.Parameter(structural_mapper.mapping_matrix(matrix_size), requires_grad=True).to(device)
+        self.matrix = nn.Parameter(structural_mapper.mapping_matrix(vector_size), requires_grad=True).to(device)
         extra_concat_units = count_function.startswith('concat') + count_function.endswith('both')
-        self.gated = nn.GRUCell(matrix_size + extra_concat_units, output_size).to(device)
+        self.gated = nn.GRUCell(vector_size + extra_concat_units, output_size).to(device)
         self.output_transform = nn.Linear(output_size, output_size).to(device) if transform_output else None
 
     def compute_counts(self, tensor, counts):
@@ -114,6 +133,7 @@ class GatedStructuralEmbedder(nn.Module):
     def forward(self, node_seq, G):
         outputs = []
         for indices, counts in self.structural_mapper.mapping(node_seq, G):
+            counts = count_transform(counts, self.counts_transform)
             tensor = self.compute_counts(self.matrix[indices, :], counts)
             indices_size = len(indices)
             hidden = torch.zeros(self.output_size).to(self.device)

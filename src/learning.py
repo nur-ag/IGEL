@@ -2,7 +2,7 @@ import dill
 import torch
 
 import numpy as np
-from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 from tqdm import tqdm, trange
 from time import time
@@ -44,7 +44,8 @@ class EarlyStopping:
 class GraphNetworkTrainer():
     def __init__(self, model, optimizer, criterion,
                 epoch_metrics=['valid_f1', 'valid_loss'],
-                display_epochs=3, early_stopping=None):
+                display_epochs=3, early_stopping=None,
+                problem_type='multiclass'):
         self.model = model
         self.optimizer = optimizer
         self.criterion = criterion
@@ -52,9 +53,7 @@ class GraphNetworkTrainer():
         self.epoch_metrics = epoch_metrics
         self.display_epochs = display_epochs
         self.early_stopping = early_stopping
-
-        self._validation_data = None
-        self._test_data = None
+        self.problem_type = problem_type
 
         # Internal variables used during training
         self._clear_internal_variables()
@@ -71,6 +70,9 @@ class GraphNetworkTrainer():
         self._epoch_time = None
         self._num_epochs = None
         self._history = []
+        self._validation_data = None
+        self._test_data = None
+        self._test_metrics = None
         return self
 
     def fit(self, batch_iterator_fn, G, num_epochs, validation_data=None, test_data=None):
@@ -117,7 +119,7 @@ class GraphNetworkTrainer():
 
     def predict_raw(self, node_seq, G):
         with torch.no_grad():
-            self.model.eval()
+            self.model = self.model.eval()
             pred_raw = self.model(node_seq, G)
             return pred_raw
 
@@ -134,14 +136,19 @@ class GraphNetworkTrainer():
         num_instances = len(node_seq)
         pred = self.predict(node_seq, G)
         pred_raw = self.predict_raw(node_seq, G)
-        split_pred = torch.sigmoid(pred_raw).detach().reshape(num_instances, -1).cpu().numpy().round()
+        if self.problem_type == 'multiclass':
+            split_pred = pred_raw.argmax(axis=1).detach().reshape(num_instances, -1).cpu().numpy().round()
+        else:
+            split_pred = torch.sigmoid(pred_raw).detach().reshape(num_instances, -1).cpu().numpy().round()
         split_true = labels.reshape(num_instances, -1).cpu().numpy()
 
+        accuracy = accuracy_score(split_pred, split_true)
         values = precision_recall_fscore_support(split_pred, split_true, average='micro')
         prec, recall, f1, _ = values
         loss = self.criterion(pred_raw, labels)
         split_loss = np.mean(loss.data.mean().tolist())
-        return {'{}_precision'.format(split): prec,
+        return {'{}_accuracy'.format(split): accuracy,
+            '{}_precision'.format(split): prec,
             '{}_recall'.format(split): recall,
             '{}_f1'.format(split): f1,
             '{}_loss'.format(split): split_loss}
@@ -156,14 +163,14 @@ class GraphNetworkTrainer():
         if self.early_stopping is not None and self._test_data is not None:
             self.model = torch.load(self.early_stopping.file_path, pickle_module=dill).eval()
             print('Loading the best model to evaluate on the test set.')
-            metrics = self.compute_metrics('test', *self._test_data)
+            self._test_metrics = self.compute_metrics('test', *self._test_data)
             print('Best model results on the test set: \n')
-            for metric, value in metrics.items():
+            for metric, value in self._test_metrics.items():
                 print('{}: {:.3f}'.format(metric, value))
 
     def before_epoch(self):
         self._epoch_start = time()
-        self.model.train()
+        self.model = self.model.train()
 
     def after_epoch(self):
         self._epoch_end = time()
@@ -196,8 +203,8 @@ class GraphNetworkTrainer():
                 raise InterruptTraining
 
     def before_batch(self, **kwargs):
-        pass
-
-    def after_batch(self, **kwargs):
         running_loss = np.mean(self._epoch_losses)
         self._batches_bar.set_postfix(loss=running_loss)
+
+    def after_batch(self, **kwargs):
+        pass

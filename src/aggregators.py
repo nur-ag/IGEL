@@ -17,6 +17,16 @@ def attention_sum(tensor):
     return tensor.sum(dim=1)
 
 
+def attention_mean(tensor):
+    '''Computes the mean of the attention masks tensor'''
+    return tensor.mean(dim=1)
+
+
+def attention_max(tensor):
+    '''Computes the mean of the attention masks tensor'''
+    return tensor.max(dim=1).values
+
+
 def combine_sum(tensor):
     '''Computes the sum of the node neighbourhood tensor'''
     return tensor.sum(dim=0)
@@ -50,10 +60,10 @@ class SamplingAggregator(nn.Module):
                  input_units, 
                  hidden_units=100, 
                  output_units=20, 
-                 node_dropout=0.2,
+                 node_dropout=0.6,
                  dropout_on_hidden=True,
                  num_hidden=1, 
-                 activation=nn.ReLU,
+                 activation=nn.ELU,
                  initialization=nn.init.xavier_uniform_,
                  aggregation=combine_sum,
                  include_node=False,
@@ -62,14 +72,15 @@ class SamplingAggregator(nn.Module):
                  sampling_model=None,
                  attend_over_dense=True,
                  num_attention_heads=5,
-                 attention_activation=nn.ReLU,
+                 attention_activation=nn.ELU,
                  attention_aggregator=attention_concat,
                  attention_outputs_by_head=True,
                  attention_max=nn.Softmax,
                  attention_initialization=nn.init.xavier_uniform_,
+                 attention_dropout=0.6,
                  number_of_peeks=2,
                  peeking_units=50,
-                 peeking_dropout=0.2,
+                 peeking_dropout=0.6,
                  device=torch.device('cpu')):
         super(SamplingAggregator, self).__init__()
 
@@ -90,7 +101,7 @@ class SamplingAggregator(nn.Module):
 
         # Attention outputs by every head, or are the sum of head activations
         self.model_attention_outputs = max(1, num_attention_heads if attention_outputs_by_head else 1)
-        self.model_output_units = self.model_attention_outputs * output_units + input_units if include_node else 0
+        self.model_output_units = self.model_attention_outputs * output_units + (input_units if include_node else 0)
 
         # Peeking mechanism to review evidence from neighbourhood
         self.peeking_units = peeking_units
@@ -100,8 +111,7 @@ class SamplingAggregator(nn.Module):
             self.peek_cell = None
         else:
             self.peek_cell = nn.GRUCell(self.model_output_units, self.peeking_units)
-            if peeking_dropout > 0.0:
-                self.peek_cell = nn.Sequential(self.peek_cell, nn.Dropout(peeking_dropout))
+        self.peek_dropout = nn.Dropout(peeking_dropout) if peeking_dropout > 0.0 else None
         num_peeking_inputs = 0 if self.peek_cell is None else self.peeking_units
 
         # Normal DNN layers over the source
@@ -143,6 +153,7 @@ class SamplingAggregator(nn.Module):
         self.attention_aggregator = attention_aggregator
         self.attention_outputs_by_head = attention_outputs_by_head
         self.attention_max = attention_max(dim=1)
+        self.attention_dropout = nn.Dropout(attention_dropout) if attention_dropout > 0.0 else None
 
     def sample_neighbourhood(self, node, G):
         neighbour_indices = G.neighbors(node)
@@ -176,7 +187,10 @@ class SamplingAggregator(nn.Module):
         tensors_rep = tensors.repeat(heads, 1, 1)
         tensors_att = attention_rep * tensors_rep
         tensors_tsp = tensors_att.transpose(0, 1)
-        return self.attention_aggregator(tensors_tsp)
+        tensors_agg = self.attention_aggregator(tensors_tsp)
+        if self.attention_dropout is not None:
+            tensors_agg = self.attention_dropout(tensors_agg)
+        return tensors_agg
 
     def get_node_set(self, node_seq, G):
         node_set = {node.index for node in node_seq}
@@ -194,7 +208,7 @@ class SamplingAggregator(nn.Module):
         
         # For every peeking operation we must sample, aggregate and reconsider
         node_tensors = []
-        for peek_index in range(min(1, self.number_of_peeks)):
+        for peek_index in range(max(1, self.number_of_peeks)):
             # Compute the whole set of nodes to encode and the neighbours of every node
             complete_set, node_neighbours = self.get_node_set(node_seq, G)
 
@@ -234,5 +248,7 @@ class SamplingAggregator(nn.Module):
             if peek_tensor is not None and peek_index < self.number_of_peeks - 1:
                 current_tensors = torch.stack(node_tensors)
                 peek_tensor = self.peek_cell(current_tensors, peek_tensor)
+                if self.peek_dropout is not None:
+                    peek_tensor = self.peek_dropout(peek_tensor)
         return torch.stack(node_tensors)
 
