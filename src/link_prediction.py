@@ -58,7 +58,7 @@ def train_link_prediction(G, edges, labels, structural_model, model_options, tra
     return trainer, lp_model
 
 def evaluate_model(link_model, edges, labels, G):
-    scores = link_model(zip(*edges), G).detach().numpy()
+    scores = link_model(zip(*edges), G).cpu().detach().numpy()
     labels = np.asarray(labels).reshape(scores.shape)
     return roc_auc_score(labels, scores)
 
