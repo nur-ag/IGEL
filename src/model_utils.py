@@ -47,7 +47,7 @@ def train_negative_sampling(G, model, neg_sampling_parameters, training_options,
     batch_iterator_fn = lambda: lambda_batch_iterator(G, neg_sampling_parameters, training_options, device)
     
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(training_model.parameters())
     trainer = GraphNetworkTrainer(training_model,
                                   optimizer, 
                                   criterion, 
