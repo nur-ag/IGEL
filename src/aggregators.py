@@ -45,7 +45,7 @@ def combine_max(tensor):
 class MultiEmbedderAggregator(nn.Module):
     def __init__(self, embedders, aggregation=lambda x: torch.cat(x, -1)):
         super(MultiEmbedderAggregator, self).__init__()
-        self.embedders = embedders
+        self.embedders = nn.ModuleList(embedders)
         self.aggregation = aggregation
 
     def forward(self, node_seq, G):
