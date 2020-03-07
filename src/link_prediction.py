@@ -37,7 +37,7 @@ LP_TRAINING_OPTIONS = TrainingParameters(batch_size=256, learning_rate=0.01, wei
 
 def train_link_prediction(G, edges, labels, structural_model, model_options, training_options, edge_function, device):
     vector_size = model_options.vector_length if model_options.model_type == 'simple' else model_options.gates_length
-    lp_model = EdgeInferenceModel(structural_model, vector_size, LINK_PREDICTION_OUTPUTS, edge_function)
+    lp_model = EdgeInferenceModel(structural_model, vector_size, LINK_PREDICTION_OUTPUTS, edge_function).to(device)
 
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(lp_model.parameters(), lr=training_options.learning_rate, weight_decay=training_options.weight_decay)

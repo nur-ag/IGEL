@@ -78,7 +78,7 @@ def train_node_classification(splits, labels, embedding_model, model_options, tr
 
     # Prepare the model, loss and optimizer
     vector_size = model_options.vector_length if model_options.model_type == 'simple' else model_options.gates_length
-    model = NodeInferenceModel(embedding_model, vector_size + features_size, labels.shape[-1])
+    model = NodeInferenceModel(embedding_model, vector_size + features_size, labels.shape[-1]).to(device)
     criterion = nn.CrossEntropyLoss() if training_options.problem_type == 'multiclass' else nn.MultiLabelSoftMarginLoss()
     optimizer = optim.Adam(model.parameters(), lr=training_options.learning_rate, weight_decay=training_options.weight_decay)
     
