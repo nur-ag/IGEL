@@ -23,10 +23,11 @@ from model_utils import make_early_stopping, make_structural_model, train_negati
 
 GRAPH_KEY = 'ppi'
 GRAPH_PATH = '{}/../data/PPI/'.format(os.path.dirname(os.path.realpath(__file__)))
-DEFAULT_DEVICE = torch.device('cpu')
 SEED = 1337
 
-LINK_PREDICTION_OUTPUTS = 1
+USE_CUDA = True 
+MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
+DEFAULT_DEVICE = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
 
 NEGATIVE_SAMPLING_OPTIONS = NegativeSamplingParameters()
 

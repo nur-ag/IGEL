@@ -19,8 +19,11 @@ from model_utils import make_structural_model, train_negative_sampling
 GRAPH_PATH = 'data/Facebook/Facebook.edgelist'
 EDGES_TO_SAMPLE = 0.5
 VALID_TEST_SPLIT = 0.5
-DEFAULT_DEVICE = torch.device('cpu')
 SEED = 1337
+
+USE_CUDA = True 
+MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
+DEFAULT_DEVICE = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
 
 LINK_PREDICTION_OUTPUTS = 1
 
