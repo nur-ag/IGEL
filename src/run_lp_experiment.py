@@ -21,22 +21,22 @@ DEVICE = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
 NUM_EXPERIMENTS = 10
 EXPERIMENTAL_CONFIG = {
     'epochs': [1],
-    'batch_size': [512],
+    'batch_size': [8192],
     'learning_rate': [1.0, 0.2, 0.04, 0.01],
     'problem_type': ['unsupervised'],
     'batch_samples_fn': ['uniform'],
     'display_epochs': [1],
     'weight_decay': [0.0],
-    'random_walk_length': [40, 80, 120, 160],
+    'random_walk_length': [40, 80, 120],
     'window_size': [5, 10, 15, 20],
     'negatives_per_positive': [1, 2, 5, 10, 20],
     'encoding_distance': [1, 2],
-    'vector_length': [32, 64, 128, 256],
+    'vector_length': [32, 64, 128],
     'model_type': ['simple'],
     'use_distance_labels': [True],
     'transform_output': [True],
     'gates_steps': [4],
-    'counts_transform': ['identity', 'log', 'sqrt'],
+    'counts_transform': ['identity', 'log'],
     'counts_function': ['concat_both'],
     'aggregator_function': ['mean']
 }
