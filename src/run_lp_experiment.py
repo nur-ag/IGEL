@@ -32,7 +32,7 @@ EXPERIMENTAL_CONFIG = {
     'negatives_per_positive': [1, 2, 5, 10, 20],
     'encoding_distance': [1, 2],
     'vector_length': [32, 64, 128, 256],
-    'model_type': ['simple', 'gated'],
+    'model_type': ['simple'],
     'use_distance_labels': [True],
     'transform_output': [True],
     'gates_steps': [4],
