@@ -183,7 +183,7 @@ class GraphNetworkTrainer():
         tqdm.write('Epoch {} took {:.2f} seconds, with a total running loss of {:.3f}.'.format(epoch, epoch_time, current_loss))
 
         # If there is a validation split, compute history, otherwise just track loss
-        metrics = {'loss': current_loss}
+        metrics = {'loss': current_loss, 'time': epoch_time}
         self._history.append(metrics)
         if self._validation_data is not None:
             for (k, v) in self.compute_metrics('valid', *self._validation_data).items():

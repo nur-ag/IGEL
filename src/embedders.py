@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 
 from structural import StructuralMapper
+from activations import Sparsemax
 
 
 class NodeEmbedder(nn.Module):
@@ -79,7 +80,7 @@ class SimpleStructuralEmbedder(nn.Module):
         embed = torch.sparse.mm(structure_tensor, self.matrix)
         output = embed / total_count_vector._values().reshape(batch_size, 1) 
         return output
-        
+
 
 class GatedStructuralEmbedder(nn.Module):
     def __init__(self, 

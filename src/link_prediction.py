@@ -1,3 +1,4 @@
+import os
 import random
 
 import numpy as np
@@ -13,30 +14,18 @@ from graph import load_graph, sample_edges, edge_difference, generate_negative_e
 from models import EdgeInferenceModel, NegativeSamplingModel
 from learning import GraphNetworkTrainer
 from batching import chunks
-from parameters import IGELParameters, NegativeSamplingParameters, TrainingParameters
 from model_utils import make_structural_model, train_negative_sampling
 
-GRAPH_PATH = 'data/Facebook/Facebook.edgelist'
+
+DEFAULT_DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 EDGES_TO_SAMPLE = 0.5
 VALID_TEST_SPLIT = 0.5
-SEED = 1337
-
-USE_CUDA = True 
-MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
-DEFAULT_DEVICE = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
-
 LINK_PREDICTION_OUTPUTS = 1
+SEED = 1
 
-NEGATIVE_SAMPLING_OPTIONS = NegativeSamplingParameters(120, 10, 20)
-
-SIMPLE_MODEL_OPTIONS = IGELParameters(model_type='simple', vector_length=300, encoding_distance=2, use_distance_labels=True, counts_transform='log', neg_sampling_parameters=NEGATIVE_SAMPLING_OPTIONS)
-GATED_MODEL_OPTIONS = IGELParameters(model_type='gated', vector_length=300, encoding_distance=2, use_distance_labels=True, gates_length=64, gates_steps=4, transform_output=True, counts_function='concat_both', aggregator_function='mean', counts_transform='log', neg_sampling_parameters=NEGATIVE_SAMPLING_OPTIONS)
-
-TRAINING_OPTIONS = TrainingParameters(batch_size=500000, learning_rate=0.001, weight_decay=0.0, epochs=5, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
-LP_TRAINING_OPTIONS = TrainingParameters(batch_size=256, learning_rate=0.01, weight_decay=0.0, epochs=500, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
 
 def train_link_prediction(G, edges, labels, structural_model, model_options, training_options, edge_function, device):
-    vector_size = model_options.vector_length if model_options.model_type == 'simple' else model_options.gates_length
+    vector_size = model_options.vector_length if model_options.model_type != 'gated' else model_options.gates_length
     lp_model = EdgeInferenceModel(structural_model, vector_size, LINK_PREDICTION_OUTPUTS, edge_function).to(device)
 
     criterion = nn.BCEWithLogitsLoss()
@@ -62,6 +51,14 @@ def evaluate_model(link_model, edges, labels, G):
     labels = np.asarray(labels).reshape(scores.shape)
     return roc_auc_score(labels, scores)
 
+def sample_edges_with_cache(G, cache_path, edges_to_sample, seed):
+    if os.path.exists(cache_path):
+        return load_graph(cache_path)
+    G_train = sample_edges(G, edges_to_sample, connected=True, seed=seed)
+    G_train.write_ncol(cache_path)
+    return G_train
+
+
 def link_prediction_experiment(graph_path, 
                    model_options=None,
                    training_options=None,
@@ -73,8 +70,8 @@ def link_prediction_experiment(graph_path,
                    link_prediction_scale=1,
                    device=DEFAULT_DEVICE,
                    seed=SEED):
-    G = load_graph(GRAPH_PATH)
-    G_train = sample_edges(G, edges_to_sample, connected=True, seed=seed)
+    G = load_graph(graph_path)
+    G_train = sample_edges_with_cache(G, '{}.{}.cache'.format(graph_path, seed), edges_to_sample, seed)
     id_to_indices = {n['id']: n.index for n in G_train.vs}
 
     # Compute all the edges needed for training and validating link prediction
@@ -105,7 +102,3 @@ def link_prediction_experiment(graph_path,
     # Evaluate and compute the final metrics
     metrics = evaluate_model(link_model, X_eval, y_eval, G_train)
     return link_model, metrics
-
-
-model, metrics = link_prediction_experiment(GRAPH_PATH, SIMPLE_MODEL_OPTIONS, TRAINING_OPTIONS, LP_TRAINING_OPTIONS)
-print('AuROC: {}'.format(metrics))
