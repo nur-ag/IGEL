@@ -3,6 +3,7 @@ import json
 import random
 
 import torch
+import numpy as np
 from filelock import FileLock
 
 from parameters import IGELParameters, NegativeSamplingParameters, TrainingParameters
