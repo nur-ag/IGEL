@@ -26,4 +26,4 @@ for experiment in total_experiment:
     expand_data(experiment)
 
 for experiment in sorted(total_experiment, key=lambda x: x['avg']):
-    json.dumps(experiment)
+    print(json.dumps(experiment))
