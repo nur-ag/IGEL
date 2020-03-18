@@ -21,6 +21,7 @@ USE_CUDA = True
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
 
 NUM_WORKERS = 8
+mp = mp.get_context('forkserver')
 
 NUM_EXPERIMENTS = 4
 EXPERIMENTAL_CONFIG = {
@@ -108,18 +109,20 @@ def run_experiments_on_thread(experiments):
     for experiment in experiments:
         run_and_save_experiment(experiment)
 
-seen_experiments = load_finished_experiments(OUTPUT_PATH)
-experiments = [e for e in generate_experiment_tuples(EXPERIMENTAL_CONFIG) 
-                 if e not in seen_experiments]
-random.shuffle(experiments)
+if __name__ == '__main__':  
+    seen_experiments = load_finished_experiments(OUTPUT_PATH)
+    experiments = [e for e in generate_experiment_tuples(EXPERIMENTAL_CONFIG) 
+                     if e not in seen_experiments]
+    random.shuffle(experiments)
 
-workers = []
-for index in range(NUM_WORKERS):
-    p = mp.Process(target=run_experiments_on_thread, args=(experiments[index::NUM_WORKERS],))
-    p.start()
-    workers.append(p)
+    workers = []
+    mp.freeze_support()
+    for index in range(NUM_WORKERS):
+        p = mp.Process(target=run_experiments_on_thread, args=(experiments[index::NUM_WORKERS],))
+        p.start()
+        workers.append(p)
 
-for w in workers:
-    w.join()
+    for w in workers:
+        w.join()
 
 
