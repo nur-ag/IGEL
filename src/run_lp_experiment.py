@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import threading
 
 import torch
 import numpy as np
@@ -19,11 +20,13 @@ USE_CUDA = True
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
 DEVICE = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
 
-NUM_EXPERIMENTS = 10
+NUM_WORKERS = 8
+
+NUM_EXPERIMENTS = 4
 EXPERIMENTAL_CONFIG = {
-    'epochs': [1],
-    'batch_size': [8192],
-    'learning_rate': [1.0, 0.2, 0.04, 0.01],
+    'epochs': [3],
+    'batch_size': [2048],
+    'learning_rate': [1.0, 0.5, 0.1, 0.05, 0.01],
     'problem_type': ['unsupervised'],
     'batch_samples_fn': ['uniform'],
     'display_epochs': [1],
@@ -73,6 +76,13 @@ def create_experiment_params(experiment_dict):
     return model_options, training_options
 
 
+def compute_stats(results):
+    return {'min': np.min(results),
+            'max': np.max(results),
+            'std': np.std(results),
+            'avg': np.mean(results)}
+
+
 def run_experiment(experiment):
     experiment_as_dict = tuple_to_dictionary(experiment)
     model_options, training_options = create_experiment_params(experiment_as_dict)
@@ -81,7 +91,7 @@ def run_experiment(experiment):
     for n in range(1, NUM_EXPERIMENTS + 1):
         model, metrics = link_prediction_experiment(GRAPH_PATH, model_options, training_options, LP_TRAINING_OPTIONS, device=DEVICE, seed=n)
         results.append(metrics)
-    results_dict = {'config': experiment_as_dict, 'results': results}
+    results_dict = {'config': experiment_as_dict, 'results': results, 'stats': compute_stats(results)}
     return results_dict
 
 
@@ -93,10 +103,22 @@ def run_and_save_experiment(experiment):
             results_json = json.dumps(results_dict)
             f.write('{}\n'.format(results_json))
 
+def run_experiments_on_thread(experiments):
+    for experiment in experiments:
+        run_and_save_experiment(experiment)
 
 seen_experiments = load_finished_experiments(OUTPUT_PATH)
 experiments = [e for e in generate_experiment_tuples(EXPERIMENTAL_CONFIG) 
                  if e not in seen_experiments]
 random.shuffle(experiments)
-for experiment in experiments:
-    run_and_save_experiment(experiment)
+
+threads = []
+for index in range(NUM_WORKERS):
+    th = threading.Thread(target=run_experiments_on_thread, args=(experiments[index::NUM_WORKERS],))
+    th.start()
+    threads.append(th)
+
+for thread in threads:
+    thread.join()
+
+
