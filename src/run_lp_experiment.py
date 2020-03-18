@@ -4,6 +4,7 @@ import random
 import threading
 
 import torch
+import torch.multiprocessing as mp
 import numpy as np
 from filelock import FileLock
 
@@ -18,14 +19,13 @@ LP_TRAINING_OPTIONS = TrainingParameters(batch_size=512, learning_rate=0.1, weig
 
 USE_CUDA = True 
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
-DEVICE = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
 
 NUM_WORKERS = 8
 
 NUM_EXPERIMENTS = 4
 EXPERIMENTAL_CONFIG = {
     'epochs': [3],
-    'batch_size': [2048],
+    'batch_size': [65536],
     'learning_rate': [1.0, 0.5, 0.1, 0.05, 0.01],
     'problem_type': ['unsupervised'],
     'batch_samples_fn': ['uniform'],
@@ -86,10 +86,11 @@ def compute_stats(results):
 def run_experiment(experiment):
     experiment_as_dict = tuple_to_dictionary(experiment)
     model_options, training_options = create_experiment_params(experiment_as_dict)
+    device = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
 
     results = []
     for n in range(1, NUM_EXPERIMENTS + 1):
-        model, metrics = link_prediction_experiment(GRAPH_PATH, model_options, training_options, LP_TRAINING_OPTIONS, device=DEVICE, seed=n)
+        model, metrics = link_prediction_experiment(GRAPH_PATH, model_options, training_options, LP_TRAINING_OPTIONS, device=device, seed=n)
         results.append(metrics)
     results_dict = {'config': experiment_as_dict, 'results': results, 'stats': compute_stats(results)}
     return results_dict
@@ -112,13 +113,13 @@ experiments = [e for e in generate_experiment_tuples(EXPERIMENTAL_CONFIG)
                  if e not in seen_experiments]
 random.shuffle(experiments)
 
-threads = []
+workers = []
 for index in range(NUM_WORKERS):
-    th = threading.Thread(target=run_experiments_on_thread, args=(experiments[index::NUM_WORKERS],))
-    th.start()
-    threads.append(th)
+    p = mp.Process(target=run_experiments_on_thread, args=(experiments[index::NUM_WORKERS],))
+    p.start()
+    workers.append(p)
 
-for thread in threads:
-    thread.join()
+for w in workers:
+    w.join()
 
 
