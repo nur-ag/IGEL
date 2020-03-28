@@ -103,9 +103,9 @@ class GatedStructuralEmbedder(nn.Module):
         self.count_function = count_function
         self.aggregation_function = aggregation_function
         self.gated = nn.GRUCell(vector_size, output_size).to(device)
-        
-        raw_matrix = structural_mapper.mapping_matrix(vector_size)
-        self.matrix = nn.Parameter(raw_matrix, requires_grad=True).to(device)
+
+        raw_matrix = structural_mapper.mapping_matrix(vector_size).to(device)
+        self.matrix = nn.Parameter(raw_matrix, requires_grad=True)
 
         num_embeddings = len(raw_matrix)
         emb_layer = nn.Embedding(num_embeddings, vector_size)
@@ -137,7 +137,7 @@ class GatedStructuralEmbedder(nn.Module):
            self.aggregation_function == 'sum' and \
            self.count_function == 'scale_norm':
            return self.forward_embedding(node_seq, G)
-           
+
         outputs = []
         for indices, counts in self.structural_mapper.mapping(node_seq, G):
             counts = count_transform(counts, self.counts_transform)
@@ -162,8 +162,8 @@ class GatedStructuralEmbedder(nn.Module):
                           for (_, c) in index_counts]
 
         # Preliminary: just raw embedding and aggregating
-        indices  = torch.LongTensor(indices_matrix, device=self.device)
-        counts   = torch.FloatTensor(counts_matrix, device=self.device).reshape(num_elements, max_length, 1)
+        indices  = torch.LongTensor(indices_matrix).to(self.device)
+        counts   = torch.FloatTensor(counts_matrix).to(self.device).reshape(num_elements, max_length, 1)
         counts   = counts / counts.sum(axis=1, keepdim=True)
         embedded = self.embedding(indices).reshape(num_elements * max_length, -1)
         hidden   = torch.zeros(num_elements, 1, self.matrix.shape[-1])
