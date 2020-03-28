@@ -17,33 +17,32 @@ OUTPUT_PATH = 'output/Facebook-result.jsonl'
 OUTPUT_LOCK_PATH = OUTPUT_PATH + '.lock'
 LP_TRAINING_OPTIONS = TrainingParameters(batch_size=512, learning_rate=0.1, weight_decay=0.0, epochs=100, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
 
-USE_CUDA = True 
+USE_CUDA = True
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
 
-NUM_WORKERS = 8
+NUM_WORKERS = 6
 mp = mp.get_context('forkserver')
 
-NUM_EXPERIMENTS = 4
+NUM_EXPERIMENTS = 5
 EXPERIMENTAL_CONFIG = {
-    'epochs': [3],
-    'batch_size': [65536],
-    'learning_rate': [1.0, 0.5, 0.1, 0.05, 0.01],
+    'epochs': [5],
+    'batch_size': [2048],
+    'learning_rate': [0.1],
     'problem_type': ['unsupervised'],
     'batch_samples_fn': ['uniform'],
     'display_epochs': [1],
     'weight_decay': [0.0],
-    'random_walk_length': [40, 80, 120],
-    'window_size': [5, 10, 15, 20],
-    'negatives_per_positive': [1, 2, 5, 10, 20],
+    'random_walk_length': [80],
+    'window_size': [20],
+    'negatives_per_positive': [20],
     'encoding_distance': [1, 2],
-    'vector_length': [32, 64, 128],
+    'vector_length': [256],
     'model_type': ['simple'],
     'use_distance_labels': [True],
-    'transform_output': [True],
-    'gates_steps': [4],
+    'gates_steps': [2],
     'counts_transform': ['identity', 'log'],
-    'counts_function': ['concat_both'],
-    'aggregator_function': ['mean']
+    'counts_function': ['scale_norm'],
+    'aggregator_function': ['sum']
 }
 
 
@@ -55,7 +54,7 @@ def load_finished_experiments(experiments_path):
     with open(experiments_path) as f:
         for line in f:
             experiment_dict = json.loads(line.strip())['config']
-            config_as_tuple = tuple([t for t in sorted(experiment_dict.items())])
+            config_as_tuple = tuple([t for t in sorted(experiment_dict.items()) if t[0] in EXPERIMENTAL_CONFIG])
             seen_experiments.add(config_as_tuple)
     return seen_experiments
 
@@ -109,9 +108,9 @@ def run_experiments_on_thread(experiments):
     for experiment in experiments:
         run_and_save_experiment(experiment)
 
-if __name__ == '__main__':  
+if __name__ == '__main__':
     seen_experiments = load_finished_experiments(OUTPUT_PATH)
-    experiments = [e for e in generate_experiment_tuples(EXPERIMENTAL_CONFIG) 
+    experiments = [e for e in generate_experiment_tuples(EXPERIMENTAL_CONFIG)
                      if e not in seen_experiments]
     random.shuffle(experiments)
 

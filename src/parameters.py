@@ -9,7 +9,6 @@ class IGELParameters():
                  use_distance_labels=True,
                  gates_length=0,
                  gates_steps=0,
-                 transform_output=False,
                  counts_function='concat_both',
                  aggregator_function='mean',
                  counts_transform='log',
@@ -20,7 +19,6 @@ class IGELParameters():
         self.use_distance_labels = use_distance_labels
         self.gates_length = gates_length
         self.gates_steps = gates_steps
-        self.transform_output = transform_output
         self.counts_function = counts_function
         self.aggregator_function = aggregator_function
         self.neg_sampling_parameters = neg_sampling_parameters

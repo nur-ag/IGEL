@@ -38,6 +38,8 @@ def count_transform(counts, function):
         return [math.log(c + 1, 2) for c in counts]
     if function == 'sqrt':
         return [math.sqrt(c) for c in counts]
+    if function == 'uniform':
+        return [1 for c in counts]
     raise ValueError('Unknown counts transform "{}"'.format(function))
 
 
@@ -88,9 +90,8 @@ class GatedStructuralEmbedder(nn.Module):
                  output_size,
                  num_aggregations,
                  structural_mapper,
-                 transform_output=True,
-                 count_function='concat_both',
-                 aggregation_function='mean',
+                 count_function='scale_norm',
+                 aggregation_function='sum',
                  counts_transform='log',
                  device=torch.device('cpu')):
         super(GatedStructuralEmbedder, self).__init__()
@@ -101,25 +102,25 @@ class GatedStructuralEmbedder(nn.Module):
         self.output_size = output_size
         self.count_function = count_function
         self.aggregation_function = aggregation_function
-        self.matrix = nn.Parameter(structural_mapper.mapping_matrix(vector_size), requires_grad=True).to(device)
-        extra_concat_units = count_function.startswith('concat') + count_function.endswith('both')
-        self.gated = nn.GRUCell(vector_size + extra_concat_units, output_size).to(device)
-        self.output_transform = nn.Linear(output_size, output_size).to(device) if transform_output else None
+        self.gated = nn.GRUCell(vector_size, output_size).to(device)
+        
+        raw_matrix = structural_mapper.mapping_matrix(vector_size)
+        self.matrix = nn.Parameter(raw_matrix, requires_grad=True).to(device)
 
-    def compute_counts(self, tensor, counts):
+        num_embeddings = len(raw_matrix)
+        emb_layer = nn.Embedding(num_embeddings, vector_size)
+        emb_layer.weight = self.matrix
+        self.embedding = emb_layer.to(device)
+
+    def compute_counts(self, tensor, counts_tensor):
         if self.count_function is None:
             return tensor
-        counts_tensor = torch.Tensor(counts).to(self.device).reshape(-1, 1)
+        if self.count_function == 'ignore':
+            return tensor
         if self.count_function == 'scale':
             return tensor * counts_tensor
         if self.count_function == 'scale_norm':
             return tensor * (counts_tensor / counts_tensor.sum())
-        if self.count_function == 'concat':
-            return torch.cat([tensor, counts_tensor], axis=1)
-        if self.count_function == 'concat_norm':
-            return torch.cat([tensor, counts_tensor / counts_tensor.sum()], axis=1)
-        if self.count_function == 'concat_both':
-            return torch.cat([tensor, counts_tensor, counts_tensor / counts_tensor.sum()], axis=1)
         raise ValueError('Invalid counts function "{}"!'.format(self.count_function))
 
     def compute_aggregation(self, tensor):
@@ -132,18 +133,48 @@ class GatedStructuralEmbedder(nn.Module):
         raise ValueError('Invalid aggregation function "{}"!'.format(self.aggregation_function))
 
     def forward(self, node_seq, G):
+        if self.device.type == 'cuda' and \
+           self.aggregation_function == 'sum' and \
+           self.count_function == 'scale_norm':
+           return self.forward_embedding(node_seq, G)
+           
         outputs = []
         for indices, counts in self.structural_mapper.mapping(node_seq, G):
             counts = count_transform(counts, self.counts_transform)
-            tensor = self.compute_counts(self.matrix[indices, :], counts)
+            counts_tensor = torch.Tensor(counts).to(self.device).reshape(-1, 1)
+            tensor = self.matrix[indices, :]
             indices_size = len(indices)
-            hidden = torch.zeros(self.output_size).to(self.device)
+            hidden = self.compute_aggregation(self.compute_counts(tensor, counts_tensor))
             for i in range(max(1, self.num_aggregations)):
                 new_hidden = self.gated(tensor, hidden.reshape(1, -1).repeat(indices_size, 1))
-                hidden = self.compute_aggregation(new_hidden)
+                with_counts = self.compute_counts(new_hidden, counts_tensor)
+                hidden = self.compute_aggregation(with_counts)
             outputs.append(hidden)
         outputs = torch.stack(outputs)
-        if self.output_transform is not None:
-            outputs = self.output_transform(outputs)
         return outputs
+
+    def forward_embedding(self, node_seq, G):
+        index_counts   = [(list(i), list(c)) for i, c in self.structural_mapper.mapping(node_seq, G)]
+        num_elements   = len(index_counts)
+        max_length     = max(len(i) for (i, _) in index_counts)
+        indices_matrix = [i + [0] * (max_length - len(i)) for (i, _) in index_counts]
+        counts_matrix  = [count_transform(c, self.counts_transform) + [0] * (max_length - len(c)) 
+                          for (_, c) in index_counts]
+
+        # Preliminary: just raw embedding and aggregating
+        indices  = torch.LongTensor(indices_matrix, device=self.device)
+        counts   = torch.FloatTensor(counts_matrix, device=self.device).reshape(num_elements, max_length, 1)
+        counts   = counts / counts.sum(axis=1, keepdim=True)
+        embedded = self.embedding(indices).reshape(num_elements * max_length, -1)
+        hidden   = torch.zeros(num_elements, 1, self.matrix.shape[-1])
+
+        # Iteratively refine the representation through gating
+        for i in range(self.num_aggregations):
+            hidden_repeat = hidden.repeat(1, max_length, 1)
+            hidden_flat   = hidden_repeat.reshape(num_elements * max_length, -1)
+            hidden_update = self.gated(embedded, hidden_flat)
+            hidden_broad  = hidden_update.reshape(num_elements, max_length, -1)
+            hidden        = (hidden_broad * counts).sum(axis=1, keepdim=True)
+        return hidden.reshape(num_elements, -1)
+
 
