@@ -21,7 +21,6 @@ def make_structural_model(G, options, device):
                                         options.gates_length, 
                                         options.gates_steps, 
                                         mapper, 
-                                        options.transform_output, 
                                         options.counts_function, 
                                         options.aggregator_function,
                                         options.counts_transform, 
