@@ -51,6 +51,8 @@ def sample_edges(G, percentage, connected=False, seed=None):
             sub_G.add_edge(e_1, e_2, **attributes)
         else:
             edges_count += 1
+    if connected:
+        assert len(G.components()) == len(sub_G.components())
     return sub_G
 
 

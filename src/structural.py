@@ -7,18 +7,18 @@ from collections import Counter
 
 def compute_degree_mapping_chunk(chunk):
     '''Chunk-based wrapper around compute_degree_mapping, to evaluate on chunks in parallel.'''
-    return [compute_degree_mapping(idx, name, nbrs, G, use_d, max_deg) 
-            for (idx, name, nbrs, G, use_d, max_deg) in chunk]
+    return [compute_degree_mapping(idx, name, nbrs, G, use_d, max_deg_bnd) 
+            for (idx, name, nbrs, G, use_d, max_deg_bnd) in chunk]
 
 
-def compute_degree_mapping(node_index, node_name, neighbours, G, use_distances, max_degree):
+def compute_degree_mapping(node_index, node_name, neighbours, G, use_distances, max_degree_bound):
     '''Degree mapping computation as a stateless function to call in parallel.'''
     G_n = G.induced_subgraph(neighbours)
-    deg = [node_deg if node_deg < max_degree else max_degree for node_deg in G_n.degree()]
+    deg = [node_deg if node_deg < max_degree_bound else max_degree_bound - 1 for node_deg in G_n.degree()]
     if use_distances:
         sub_n = next(v for v in G_n.vs if v['name'] == node_name)
         deg_dist = zip((d[0] for d in G_n.shortest_paths_dijkstra(target=sub_n)), deg)
-        deg = [dist * max_degree + deg for (dist, deg) in deg_dist]
+        deg = [dist * max_degree_bound + deg for (dist, deg) in deg_dist]
     return node_index, list(zip(*Counter(deg).most_common()))
 
 
@@ -33,23 +33,23 @@ class StructuralMapper:
         self.use_distances = use_distances
         self.cache_field = cache_field
         self.num_workers = num_workers
-        self.max_degree = max(G.degree())
+        self.max_degree_bound = max(G.degree()) + 1
         self.source_G = G
 
     def num_elements(self):
-        return (self.distance + 1) * self.max_degree
+        return (self.distance + 1) * self.max_degree_bound
 
     def mapping_matrix(self, matrix_size):
         G = self.source_G
         total_elements = self.num_elements()
-        matrix = torch.zeros(total_elements + 1, matrix_size)
+        matrix = torch.zeros(total_elements, matrix_size)
         xavier_uniform_(matrix)
         total_structures = {value for mapping in self.mapping(G.vs, G) for value in mapping}
 
         # Zero out matrix entries for unseen matrices
-        for deg in range(self.max_degree):
+        for deg in range(self.max_degree_bound):
             for distance in range(self.distance):
-                structure_index = distance * self.max_degree + deg if self.use_distances else deg
+                structure_index = distance * self.max_degree_bound + deg if self.use_distances else deg
                 matrix[structure_index] *= math.log2(deg + 1)
                 if structure_index not in total_structures:
                     matrix[structure_index] = 0.0
@@ -67,11 +67,11 @@ class StructuralMapper:
                                                     neighbours, 
                                                     G, 
                                                     self.use_distances, 
-                                                    self.max_degree)
+                                                    self.max_degree_bound)
                 deg_seq.append(mapping)
         else:
             pool = Pool(processes=self.num_workers)
-            as_tuples = [(n.index, n['name'], nbrs, G, self.use_distances, self.max_degree) 
+            as_tuples = [(n.index, n['name'], nbrs, G, self.use_distances, self.max_degree_bound) 
                          for (n, nbrs) in zip(node_seq, neighbours_seq)]
             chunks = [as_tuples[x::self.num_workers] for x in range(self.num_workers)]
             chunk_deg = pool.map(compute_degree_mapping_chunk, chunks)
