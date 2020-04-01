@@ -166,7 +166,7 @@ class GatedStructuralEmbedder(nn.Module):
         counts   = torch.FloatTensor(counts_matrix).to(self.device).reshape(num_elements, max_length, 1)
         counts   = counts / counts.sum(axis=1, keepdim=True)
         embedded = self.embedding(indices).reshape(num_elements * max_length, -1)
-        hidden   = torch.zeros(num_elements, 1, self.matrix.shape[-1])
+        hidden   = torch.zeros(num_elements, 1, self.matrix.shape[-1]).to(self.device)
 
         # Iteratively refine the representation through gating
         for i in range(self.num_aggregations):

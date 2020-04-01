@@ -1,4 +1,6 @@
+import math
 import torch
+from torch.nn.init import xavier_uniform_
 from multiprocessing import cpu_count, Pool
 from collections import Counter
 
@@ -40,13 +42,15 @@ class StructuralMapper:
     def mapping_matrix(self, matrix_size):
         G = self.source_G
         total_elements = self.num_elements()
-        matrix = torch.rand(total_elements + 1, matrix_size)
+        matrix = torch.zeros(total_elements + 1, matrix_size)
+        xavier_uniform_(matrix)
         total_structures = {value for mapping in self.mapping(G.vs, G) for value in mapping}
 
         # Zero out matrix entries for unseen matrices
         for deg in range(self.max_degree):
             for distance in range(self.distance):
                 structure_index = distance * self.max_degree + deg if self.use_distances else deg
+                matrix[structure_index] *= math.log2(deg + 1)
                 if structure_index not in total_structures:
                     matrix[structure_index] = 0.0
         return matrix

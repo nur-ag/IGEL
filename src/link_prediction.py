@@ -47,9 +47,11 @@ def train_link_prediction(G, edges, labels, structural_model, model_options, tra
     return trainer, lp_model
 
 def evaluate_model(link_model, edges, labels, G):
-    scores = link_model(zip(*edges), G).cpu().detach().numpy()
-    labels = np.asarray(labels).reshape(scores.shape)
-    return roc_auc_score(labels, scores)
+    with torch.no_grad():
+        link_model = link_model.eval()
+        scores = link_model(zip(*edges), G).cpu().detach().numpy()
+        labels = np.asarray(labels).reshape(scores.shape)
+        return roc_auc_score(labels, scores)
 
 def sample_edges_with_cache(G, cache_path, edges_to_sample, seed):
     if os.path.exists(cache_path):
