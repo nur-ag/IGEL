@@ -108,15 +108,20 @@ def negative_sampling_generator(G,
                 for n in range(negatives_per_positive):
                     yield node, random.choice(indices), 0
 
-def negative_sampling_batcher(ns_generator, batch_size=512, batch_precache_scale=2048):
+def negative_sampling_batcher(ns_generator, batch_size=512, batch_precache_scale=2048, seed=7):
     source_list = []
     target_list = []
     labels = []
+    if seed is not None and seed:
+        random.seed(seed)
     for source, target, label in ns_generator:
         source_list.append(source)
         target_list.append(target)
         labels.append(label)
         if len(source_list) == batch_size * batch_precache_scale:
+            zipped_shuffle = [t for t in zip(source_list, target_list, labels)]
+            random.shuffle(zipped_shuffle)
+            source_list, target_list, labels = [list(l) for l in zip(*zipped_shuffle)]
             for subset in range(batch_precache_scale):
                 source_list_subset = source_list[subset::batch_precache_scale]
                 target_list_subset = target_list[subset::batch_precache_scale]
@@ -125,6 +130,9 @@ def negative_sampling_batcher(ns_generator, batch_size=512, batch_precache_scale
             source_list = []
             target_list = []
             labels = []
+    zipped_shuffle = [t for t in zip(source_list, target_list, labels)]
+    random.shuffle(zipped_shuffle)
+    source_list, target_list, labels = [list(l) for l in zip(*zipped_shuffle)]
     for subset in range(batch_precache_scale):
         source_list_subset = source_list[subset::batch_precache_scale]
         target_list_subset = target_list[subset::batch_precache_scale]
