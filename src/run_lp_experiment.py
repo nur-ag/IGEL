@@ -15,7 +15,7 @@ from experiment_utils import generate_experiment_tuples, tuple_to_dictionary
 GRAPH_PATH = 'data/Facebook/Facebook.edgelist'
 OUTPUT_PATH = 'output/Facebook-result.jsonl'
 OUTPUT_LOCK_PATH = OUTPUT_PATH + '.lock'
-LP_TRAINING_OPTIONS = TrainingParameters(batch_size=512, learning_rate=0.1, weight_decay=0.0, epochs=100, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
+LP_TRAINING_OPTIONS = TrainingParameters(batch_size=512, learning_rate=0.1, weight_decay=0.0, epochs=20, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
 
 USE_CUDA = True
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
@@ -23,24 +23,24 @@ MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
 NUM_WORKERS = 6
 mp = mp.get_context('forkserver')
 
-NUM_EXPERIMENTS = 5
+NUM_EXPERIMENTS = 10
 EXPERIMENTAL_CONFIG = {
-    'epochs': [5],
+    'epochs': [1, 3, 5],
     'batch_size': [2048],
-    'learning_rate': [0.1],
+    'learning_rate': [0.5, 0.1, 0.05, 0.01],
     'problem_type': ['unsupervised'],
     'batch_samples_fn': ['uniform'],
     'display_epochs': [1],
     'weight_decay': [0.0],
-    'random_walk_length': [80],
-    'window_size': [20],
-    'negatives_per_positive': [20],
+    'random_walk_length': [20, 30, 40, 60, 80],
+    'window_size': [2, 5, 8, 10],
+    'negatives_per_positive': [2, 5, 8, 10],
     'encoding_distance': [1, 2],
-    'vector_length': [256],
-    'model_type': ['simple'],
+    'vector_length': [64, 128, 256],
+    'model_type': ['simple', 'gated'],
     'use_distance_labels': [True],
-    'gates_steps': [2],
-    'counts_transform': ['identity', 'log'],
+    'gates_steps': [2, 3, 4],
+    'counts_transform': ['uniform', 'identity', 'log'],
     'counts_function': ['scale_norm'],
     'aggregator_function': ['sum']
 }
@@ -98,7 +98,7 @@ def run_experiment(experiment):
 
 def run_and_save_experiment(experiment):
     results_dict = run_experiment(experiment)
-    print(experiment, np.mean(results_dict['results']))
+    print(experiment, results_dict['results'], np.mean(results_dict['results']))
     with FileLock(OUTPUT_LOCK_PATH, timeout=5):
         with open(OUTPUT_PATH, 'a+') as f:
             results_json = json.dumps(results_dict)

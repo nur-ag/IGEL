@@ -12,7 +12,7 @@ from sklearn.model_selection import train_test_split
 
 from graph import load_graph, sample_edges, edge_difference, generate_negative_edges
 from models import EdgeInferenceModel, NegativeSamplingModel
-from learning import GraphNetworkTrainer
+from learning import GraphNetworkTrainer, EarlyStopping
 from batching import chunks
 from model_utils import make_structural_model, train_negative_sampling
 
@@ -34,6 +34,7 @@ def train_link_prediction(G, edges, labels, structural_model, model_options, tra
                                   optimizer, 
                                   criterion, 
                                   display_epochs=training_options.display_epochs, 
+                                  early_stopping=EarlyStopping(25, '/dev/null', 'train_loss', 0, -1),
                                   problem_type='unsupervised')
     def edge_batch_fn():
         edge_labels = zip(edges, labels)
@@ -72,13 +73,17 @@ def link_prediction_experiment(graph_path,
                    link_prediction_scale=1,
                    device=DEFAULT_DEVICE,
                    seed=SEED):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
     G = load_graph(graph_path)
     G_train = sample_edges_with_cache(G, '{}.{}.cache'.format(graph_path, seed), edges_to_sample, seed)
     id_to_indices = {n['id']: n.index for n in G_train.vs}
 
     # Compute all the edges needed for training and validating link prediction
     link_eval_edges_pos = edge_difference(G, G_train) * link_prediction_scale
-    link_eval_edges_neg = generate_negative_edges(link_eval_edges_pos, G, link_prediction_scale)
+    link_eval_edges_neg = generate_negative_edges(link_eval_edges_pos, G, link_prediction_scale, seed)
     link_eval_edges = [(id_to_indices[a], id_to_indices[b]) for a, b in link_eval_edges_pos + link_eval_edges_neg]
     link_eval_labels = [1] * len(link_eval_edges_pos) + [0] * len(link_eval_edges_neg)
 
@@ -92,11 +97,11 @@ def link_prediction_experiment(graph_path,
     # Prepare the components and train the embedding and link prediction models
     mapper, model = make_structural_model(G_train, model_options, device)
     trained_model = train_negative_sampling(G_train, model, model_options.neg_sampling_parameters, training_options, device)
-    
+
     # Freeze the model -- unsupervised representation setting with no retraining
     if freeze_structural_model:
-        trained_model.requires_grad = False
-        for param in trained_model.parameters():
+        model.requires_grad = False
+        for param in model.parameters():
             param.requires_grad = False
 
     trainer, link_model = train_link_prediction(G_train, X_link, y_link, model, model_options, link_prediction_training_options, edge_function, device)

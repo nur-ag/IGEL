@@ -1,3 +1,4 @@
+import math
 import random
 
 
@@ -10,6 +11,27 @@ def chunks(source, chunk_size):
             current_chunk = []
     if current_chunk:
         yield current_chunk
+
+
+def index_samples(G, split_indices, batch_size):
+    indices = sorted(split_indices, key=lambda n: n.index)
+    indices = [n.index for n in indices]
+    for batch in chunks(indices, batch_size):
+        yield batch
+
+
+def degree_sorted_samples(G, split_indices, batch_size, reverse=False):
+    indices = sorted(split_indices, key=lambda n: n.degree(), reverse=reverse)
+    indices = [n.index for n in indices]
+    for batch in chunks(indices, batch_size):
+        yield batch
+
+
+def random_degree_weighted_samples(G, split_indices, batch_size, reverse=False):
+    order = sorted(split_indices, key=lambda n: random.random() * math.log(n.degree()), reverse=reverse)
+    indices = [n.index for n in order]
+    for batch in chunks(indices, batch_size):
+        yield batch
 
 
 def uniformly_random_samples(G, split_indices, batch_size):
@@ -85,12 +107,13 @@ def random_walk(node, G, length):
 def graph_random_walks(G, 
                        random_walk_length=80,
                        batch_size=512, 
-                       node_sampling_fn=uniformly_random_samples,
+                       node_sampling_fn=index_samples,
                        random_walk_fn=random_walk):
     node_generator = node_sampling_fn(G, G.vs, batch_size)
     for chunk in node_generator:
         for node in chunk:
             yield [n for n in random_walk_fn(node, G, random_walk_length)]
+
 
 def negative_sampling_generator(G, 
                                 random_walk_generator, 
@@ -108,12 +131,11 @@ def negative_sampling_generator(G,
                 for n in range(negatives_per_positive):
                     yield node, random.choice(indices), 0
 
-def negative_sampling_batcher(ns_generator, batch_size=512, batch_precache_scale=2048, seed=7):
+
+def negative_sampling_batcher(ns_generator, batch_size=512, batch_precache_scale=2048):
     source_list = []
     target_list = []
     labels = []
-    if seed is not None and seed:
-        random.seed(seed)
     for source, target, label in ns_generator:
         source_list.append(source)
         target_list.append(target)
@@ -141,6 +163,9 @@ def negative_sampling_batcher(ns_generator, batch_size=512, batch_precache_scale
                 
 
 batch_dictionary_mapping = {
+    'index': index_samples,
+    'degree': degree_sorted_samples,
+    'degree_random': random_degree_weighted_samples,
     'uniform': uniformly_random_samples,
     'bfs': random_bfs_samples,
     'random_walk': random_walk_samples

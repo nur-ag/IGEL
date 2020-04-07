@@ -31,13 +31,13 @@ def make_structural_model(G, options, device):
 
 
 def lambda_batch_iterator(G, neg_sampling_parameters, training_options, device):
-    batch_gen = graph_random_walks(G, neg_sampling_parameters.random_walk_length, training_options.batch_size)
+    batch_gen = graph_random_walks(G, neg_sampling_parameters.random_walk_length, training_options.batch_size, training_options.batch_samples_fn)
     ns_gen = negative_sampling_generator(G, 
                                          batch_gen, 
                                          neg_sampling_parameters.window_size, 
                                          neg_sampling_parameters.negatives_per_positive)
     pair_labels = negative_sampling_batcher(ns_gen, training_options.batch_size)
-    all_batches = ((pair, torch.Tensor(label).to(device).reshape(-1, 1)) for pair, label in pair_labels)
+    all_batches = ((pair, torch.FloatTensor(label).to(device).reshape(-1, 1)) for pair, label in pair_labels)
     return all_batches
 
 
@@ -46,7 +46,7 @@ def train_negative_sampling(G, model, neg_sampling_parameters, training_options,
     batch_iterator_fn = lambda: lambda_batch_iterator(G, neg_sampling_parameters, training_options, device)
     
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(training_model.parameters())
+    optimizer = optim.Adam(training_model.parameters(), lr=training_options.learning_rate, weight_decay=training_options.weight_decay)
     trainer = GraphNetworkTrainer(training_model,
                                   optimizer, 
                                   criterion, 

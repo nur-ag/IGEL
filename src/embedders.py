@@ -144,8 +144,8 @@ class GatedStructuralEmbedder(nn.Module):
             counts_tensor = torch.Tensor(counts).to(self.device).reshape(-1, 1)
             tensor = self.matrix[indices, :]
             indices_size = len(indices)
-            hidden = self.compute_aggregation(self.compute_counts(tensor, counts_tensor))
-            for i in range(max(1, self.num_aggregations)):
+            hidden = torch.zeros(tensor.shape[-1])
+            for i in range(self.num_aggregations):
                 new_hidden = self.gated(tensor, hidden.reshape(1, -1).repeat(indices_size, 1))
                 with_counts = self.compute_counts(new_hidden, counts_tensor)
                 hidden = self.compute_aggregation(with_counts)

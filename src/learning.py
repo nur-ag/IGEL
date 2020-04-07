@@ -45,7 +45,7 @@ class GraphNetworkTrainer():
     def __init__(self, model, optimizer, criterion,
                 epoch_metrics=['valid_f1', 'valid_loss'],
                 display_epochs=3, early_stopping=None,
-                problem_type='multiclass'):
+                scheduler=None, problem_type='multiclass'):
         self.model = model
         self.optimizer = optimizer
         self.criterion = criterion
@@ -53,6 +53,7 @@ class GraphNetworkTrainer():
         self.epoch_metrics = epoch_metrics
         self.display_epochs = display_epochs
         self.early_stopping = early_stopping
+        self.scheduler = scheduler
         self.problem_type = problem_type
 
         # Internal variables used during training
@@ -112,6 +113,8 @@ class GraphNetworkTrainer():
         output = self.model(node_seq, G)
         loss = self.criterion(output, labels)
         loss.backward()
+        if self.scheduler is not None:
+            self.scheduler.step(loss)
         self.optimizer.step()
         self._batch_loss = loss.data.detach().mean().item()
         self.after_batch()
