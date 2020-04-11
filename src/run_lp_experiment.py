@@ -12,37 +12,40 @@ from parameters import IGELParameters, NegativeSamplingParameters, TrainingParam
 from link_prediction import link_prediction_experiment
 from experiment_utils import generate_experiment_tuples, tuple_to_dictionary
 
-GRAPH_PATH = 'data/Facebook/Facebook.edgelist'
-OUTPUT_PATH = 'output/Facebook-result.jsonl'
+KEY = 'Facebook' 
+#KEY = 'CA-AstroPh'
+GRAPH_PATH = 'data/{}/{}.edgelist'.format(KEY, KEY)
+OUTPUT_PATH = 'output/{}-result.jsonl'.format(KEY)
 OUTPUT_LOCK_PATH = OUTPUT_PATH + '.lock'
-LP_TRAINING_OPTIONS = TrainingParameters(batch_size=512, learning_rate=0.1, weight_decay=0.0, epochs=20, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
+LP_TRAINING_OPTIONS = TrainingParameters(batch_size=2048, learning_rate=0.05, weight_decay=0.0, epochs=30, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
 
 USE_CUDA = True
 MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
 
-NUM_WORKERS = 6
+NUM_WORKERS = 1
 mp = mp.get_context('forkserver')
 
-NUM_EXPERIMENTS = 10
+NUM_EXPERIMENTS = 5
 EXPERIMENTAL_CONFIG = {
-    'epochs': [1, 3, 5],
-    'batch_size': [2048],
-    'learning_rate': [0.5, 0.1, 0.05, 0.01],
+    'epochs': [2, 4],
+    'batch_size': [100000],
+    'learning_rate': [0.1],
     'problem_type': ['unsupervised'],
     'batch_samples_fn': ['uniform'],
     'display_epochs': [1],
     'weight_decay': [0.0],
-    'random_walk_length': [20, 30, 40, 60, 80],
-    'window_size': [2, 5, 8, 10],
-    'negatives_per_positive': [2, 5, 8, 10],
+    'random_walk_length': [10, 20, 30, 40],
+    'window_size': [3, 5, 7, 9],
+    'negatives_per_positive': [3, 5, 7, 9],
     'encoding_distance': [1, 2],
-    'vector_length': [64, 128, 256],
-    'model_type': ['simple', 'gated'],
+    'vector_length': [50, 100, 200],
+    'model_type': ['simple'],
     'use_distance_labels': [True],
-    'gates_steps': [2, 3, 4],
+    'gates_steps': [2],
     'counts_transform': ['uniform', 'identity', 'log'],
     'counts_function': ['scale_norm'],
-    'aggregator_function': ['sum']
+    'aggregator_function': ['sum'],
+    'use_seed': [False]
 }
 
 
@@ -90,8 +93,9 @@ def run_experiment(experiment):
 
     results = []
     for n in range(1, NUM_EXPERIMENTS + 1):
-        model, metrics = link_prediction_experiment(GRAPH_PATH, model_options, training_options, LP_TRAINING_OPTIONS, device=device, seed=n)
+        model, metrics = link_prediction_experiment(GRAPH_PATH, model_options, training_options, LP_TRAINING_OPTIONS, device=device, experiment_id=n, use_seed=experiment_as_dict['use_seed'])
         results.append(metrics)
+        print('Finished experiment {} with result: {}'.format(n, metrics))
     results_dict = {'config': experiment_as_dict, 'results': results, 'stats': compute_stats(results)}
     return results_dict
 

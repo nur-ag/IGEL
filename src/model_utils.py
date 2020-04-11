@@ -10,7 +10,7 @@ from structural import StructuralMapper
 
 
 def make_structural_model(G, options, device):
-    mapper = StructuralMapper(G, distance=options.encoding_distance, use_distances=options.use_distance_labels)
+    mapper = StructuralMapper(G, distance=options.encoding_distance, use_distances=options.use_distance_labels, device=device)
     if options.model_type == 'simple':
         model = SimpleStructuralEmbedder(options.vector_length, 
                                          mapper, 

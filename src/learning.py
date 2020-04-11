@@ -1,11 +1,23 @@
+import os
 import dill
 import torch
+import random
 
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 from tqdm import tqdm, trange
 from time import time
+
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
 
 
 class InterruptTraining(StopIteration):

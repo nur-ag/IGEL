@@ -99,9 +99,12 @@ def random_walk(node, G, length):
     yield last_node
     while seen_nodes < length:
         next_choices = G.neighbors(last_node)
-        last_node = random.choice(next_choices)
-        seen_nodes += 1
-        yield last_node
+        if next_choices:
+            last_node = random.choice(next_choices)
+            seen_nodes += 1
+            yield last_node
+        else:
+            break
 
 
 def graph_random_walks(G, 

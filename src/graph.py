@@ -78,11 +78,10 @@ def generate_negative_edge(all_ids, real_edges):
     return edge
 
 
-def generate_negative_edges(positive_edges, G, num_samples=1, seed=None):
-    if seed is not None:
-        random.seed(seed)
+def generate_negative_edges(positive_edges, G, num_samples=1):
     all_ids = G.vs['id']
     all_edges = {edge for edge in edges_to_ids(G)}
+    all_edges |= set(positive_edges)
     negative_edges = []
     num_samples = max(1, num_samples)
     for i in range(len(positive_edges) * num_samples):

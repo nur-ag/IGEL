@@ -12,7 +12,7 @@ from sklearn.model_selection import train_test_split
 
 from graph import load_graph, sample_edges, edge_difference, generate_negative_edges
 from models import EdgeInferenceModel, NegativeSamplingModel
-from learning import GraphNetworkTrainer, EarlyStopping
+from learning import GraphNetworkTrainer, EarlyStopping, set_seed
 from batching import chunks
 from model_utils import make_structural_model, train_negative_sampling
 
@@ -21,7 +21,7 @@ DEFAULT_DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.de
 EDGES_TO_SAMPLE = 0.5
 VALID_TEST_SPLIT = 0.5
 LINK_PREDICTION_OUTPUTS = 1
-SEED = 1
+EXPERIMENT_ID = 1
 
 
 def train_link_prediction(G, edges, labels, structural_model, model_options, training_options, edge_function, device):
@@ -54,10 +54,10 @@ def evaluate_model(link_model, edges, labels, G):
         labels = np.asarray(labels).reshape(scores.shape)
         return roc_auc_score(labels, scores)
 
-def sample_edges_with_cache(G, cache_path, edges_to_sample, seed):
+def sample_edges_with_cache(G, cache_path, edges_to_sample):
     if os.path.exists(cache_path):
         return load_graph(cache_path)
-    G_train = sample_edges(G, edges_to_sample, connected=True, seed=seed)
+    G_train = sample_edges(G, edges_to_sample, connected=True)
     G_train.write_ncol(cache_path)
     return G_train
 
@@ -72,20 +72,25 @@ def link_prediction_experiment(graph_path,
                    freeze_structural_model=True,
                    link_prediction_scale=1,
                    device=DEFAULT_DEVICE,
-                   seed=SEED):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
+                   experiment_id=EXPERIMENT_ID,
+                   use_seed=True):
+    seed = None
+    if use_seed:
+        seed = experiment_id
+        set_seed(seed)
     G = load_graph(graph_path)
-    G_train = sample_edges_with_cache(G, '{}.{}.cache'.format(graph_path, seed), edges_to_sample, seed)
+    G_train = sample_edges_with_cache(G, '{}.{}.cache'.format(graph_path, experiment_id), edges_to_sample)
     id_to_indices = {n['id']: n.index for n in G_train.vs}
 
     # Compute all the edges needed for training and validating link prediction
     link_eval_edges_pos = edge_difference(G, G_train) * link_prediction_scale
-    link_eval_edges_neg = generate_negative_edges(link_eval_edges_pos, G, link_prediction_scale, seed)
-    link_eval_edges = [(id_to_indices[a], id_to_indices[b]) for a, b in link_eval_edges_pos + link_eval_edges_neg]
+    link_eval_edges_neg = generate_negative_edges(link_eval_edges_pos, G_train, link_prediction_scale)
+    link_eval_edges = [(id_to_indices.get(a, None), id_to_indices.get(b, None)) for a, b in link_eval_edges_pos + link_eval_edges_neg]
     link_eval_labels = [1] * len(link_eval_edges_pos) + [0] * len(link_eval_edges_neg)
+
+    # Remove edges that link to unreachable nodes
+    link_eval_edges, link_eval_labels = zip(*[(edge, label) for (edge, label) in zip(link_eval_edges, link_eval_labels) 
+                                                            if all(node is not None for node in edge)])
 
     # Prepare the splits that will be used for training and evaluation
     X_link, X_eval, y_link, y_eval = train_test_split(link_eval_edges, 

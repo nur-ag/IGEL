@@ -28,13 +28,15 @@ class StructuralMapper:
                  distance=1,
                  use_distances=False,
                  num_workers=cpu_count(),
-                 cache_field='neigh_deg'):
+                 cache_field='neigh_deg',
+                 device=None):
         self.distance = distance
         self.use_distances = use_distances
         self.cache_field = cache_field
         self.num_workers = num_workers
         self.max_degree_bound = max(G.degree()) + 1
         self.source_G = G
+        self.device = device
 
     def num_elements(self):
         return (self.distance + 1) * self.max_degree_bound
@@ -42,11 +44,18 @@ class StructuralMapper:
     def mapping_matrix(self, matrix_size):
         G = self.source_G
         total_elements = self.num_elements()
-        matrix = torch.rand(total_elements, matrix_size, requires_grad=True) - 0.5
+        matrix = torch.rand(total_elements, matrix_size, requires_grad=True)
+
+        # using `.to(device)` didn't converge -- this is just slightly ugly
+        if self.device.type == 'cuda':
+            matrix = matrix.cuda()
+
+        matrix = matrix - 0.5
         for i in range(1, total_elements):
             degree = (i % self.max_degree_bound)
             matrix[i] *= (1 / math.log(degree + 1)) if degree else 0.0
-        return (matrix - matrix.mean(axis=0)) / matrix.std(axis=0)
+        matrix = (matrix - matrix.mean(axis=0)) / matrix.std(axis=0)
+        return matrix
 
     def compute_mapping(self, node_seq, G):
         node_indices = [node.index for node in node_seq]
