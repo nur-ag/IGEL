@@ -1,6 +1,8 @@
 import os
 import json
+import dill
 import random
+import argparse
 import threading
 
 import torch
@@ -10,46 +12,24 @@ from filelock import FileLock
 
 from parameters import IGELParameters, NegativeSamplingParameters, TrainingParameters
 from link_prediction import link_prediction_experiment
-from experiment_utils import generate_experiment_tuples, tuple_to_dictionary
+from experiment_utils import generate_experiment_tuples, tuple_to_dictionary, hash_dictionary
 
 KEY = 'Facebook' 
 #KEY = 'CA-AstroPh'
 GRAPH_PATH = 'data/{}/{}.edgelist'.format(KEY, KEY)
 OUTPUT_PATH = 'output/{}-result.jsonl'.format(KEY)
+MODEL_OUTPUT_PATH = 'output/{}'.format(KEY)
+EXPERIMENTAL_PATH = 'configs/linkPrediction.json'
 OUTPUT_LOCK_PATH = OUTPUT_PATH + '.lock'
 LP_TRAINING_OPTIONS = TrainingParameters(batch_size=2048, learning_rate=0.05, weight_decay=0.0, epochs=30, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
-
-USE_CUDA = True
-MOVE_TO_CUDA = USE_CUDA and torch.cuda.is_available()
 
 NUM_WORKERS = 1
 mp = mp.get_context('forkserver')
 
-NUM_EXPERIMENTS = 5
-EXPERIMENTAL_CONFIG = {
-    'epochs': [2, 4],
-    'batch_size': [100000],
-    'learning_rate': [0.1],
-    'problem_type': ['unsupervised'],
-    'batch_samples_fn': ['uniform'],
-    'display_epochs': [1],
-    'weight_decay': [0.0],
-    'random_walk_length': [10, 20, 30, 40],
-    'window_size': [3, 5, 7, 9],
-    'negatives_per_positive': [3, 5, 7, 9],
-    'encoding_distance': [1, 2],
-    'vector_length': [50, 100, 200],
-    'model_type': ['simple'],
-    'use_distance_labels': [True],
-    'gates_steps': [2],
-    'counts_transform': ['uniform', 'identity', 'log'],
-    'counts_function': ['scale_norm'],
-    'aggregator_function': ['sum'],
-    'use_seed': [False]
-}
+NUM_EXPERIMENTS = 3
 
 
-def load_finished_experiments(experiments_path):
+def load_finished_experiments(experiments_path, experimental_config):
     seen_experiments = set()
     if not os.path.exists(experiments_path):
         return seen_experiments
@@ -57,7 +37,7 @@ def load_finished_experiments(experiments_path):
     with open(experiments_path) as f:
         for line in f:
             experiment_dict = json.loads(line.strip())['config']
-            config_as_tuple = tuple([t for t in sorted(experiment_dict.items()) if t[0] in EXPERIMENTAL_CONFIG])
+            config_as_tuple = tuple([t for t in sorted(experiment_dict.items()) if t[0] in experimental_config])
             seen_experiments.add(config_as_tuple)
     return seen_experiments
 
@@ -86,46 +66,98 @@ def compute_stats(results):
             'avg': np.mean(results)}
 
 
-def run_experiment(experiment):
+def run_experiment(experiment, num_attempts, graph_path, model_output_path, move_to_cuda):
     experiment_as_dict = tuple_to_dictionary(experiment)
+    experiment_hash = hash_dictionary(experiment_as_dict)[:8]
     model_options, training_options = create_experiment_params(experiment_as_dict)
-    device = torch.device('cuda') if MOVE_TO_CUDA else torch.device('cpu')
+    device = torch.device('cuda') if move_to_cuda else torch.device('cpu')
 
     results = []
-    for n in range(1, NUM_EXPERIMENTS + 1):
-        model, metrics = link_prediction_experiment(GRAPH_PATH, model_options, training_options, LP_TRAINING_OPTIONS, device=device, experiment_id=n, use_seed=experiment_as_dict['use_seed'])
+    for n in range(1, num_attempts + 1):
+        model, metrics = link_prediction_experiment(graph_path, 
+                                                    model_options, 
+                                                    training_options, 
+                                                    LP_TRAINING_OPTIONS, 
+                                                    freeze_structural_model=experiment_as_dict['freeze_embeddings'], 
+                                                    device=device, 
+                                                    experiment_id=n, 
+                                                    use_seed=experiment_as_dict['use_seed'])
         results.append(metrics)
-        print('Finished experiment {} with result: {}'.format(n, metrics))
-    results_dict = {'config': experiment_as_dict, 'results': results, 'stats': compute_stats(results)}
+        if model_output_path.strip():
+            experiment_model_path = '{}.{}-{}.model'.format(model_output_path, experiment_hash, n)
+            torch.save(model, experiment_model_path, pickle_module=dill)
+            print('Finished experiment {} with result: {}. Storing model in {}.'.format(n, metrics, experiment_model_path))
+        else:
+            print('Finished experiment {} with result: {}.'.format(n, metrics))
+    results_dict = {'config': experiment_as_dict, 'results': results, 'stats': compute_stats(results), 'hash': experiment_hash}
     return results_dict
 
 
-def run_and_save_experiment(experiment):
-    results_dict = run_experiment(experiment)
+def run_and_save_experiment(experiment, 
+                            num_attempts, 
+                            graph_path, 
+                            output_path,
+                            model_output_path,
+                            move_to_cuda):
+    results_dict = run_experiment(experiment, num_attempts, graph_path, model_output_path, move_to_cuda)
     print(experiment, results_dict['results'], np.mean(results_dict['results']))
-    with FileLock(OUTPUT_LOCK_PATH, timeout=5):
-        with open(OUTPUT_PATH, 'a+') as f:
+    with FileLock('{}.lock'.format(output_path), timeout=5):
+        with open(output_path, 'a+') as f:
             results_json = json.dumps(results_dict)
             f.write('{}\n'.format(results_json))
 
-def run_experiments_on_thread(experiments):
+def run_experiments_on_thread(experiments, 
+                              num_attempts, 
+                              graph_path, 
+                              output_path, 
+                              model_output_path, 
+                              move_to_cuda):
     for experiment in experiments:
-        run_and_save_experiment(experiment)
+        run_and_save_experiment(experiment, num_attempts, 
+                                graph_path, output_path, 
+                                model_output_path,
+                                move_to_cuda)
 
-if __name__ == '__main__':
-    seen_experiments = load_finished_experiments(OUTPUT_PATH)
-    experiments = [e for e in generate_experiment_tuples(EXPERIMENTAL_CONFIG)
+
+def run(num_workers, num_attempts, graph_path, output_path, model_output_path, experimental_config, move_to_cuda):
+    seen_experiments = load_finished_experiments(output_path, experimental_config)
+    experiments = [e for e in generate_experiment_tuples(experimental_config)
                      if e not in seen_experiments]
     random.shuffle(experiments)
 
     workers = []
     mp.freeze_support()
-    for index in range(NUM_WORKERS):
-        p = mp.Process(target=run_experiments_on_thread, args=(experiments[index::NUM_WORKERS],))
-        p.start()
-        workers.append(p)
+    for index in range(num_workers):
+        arguments = (experiments[index::num_workers], num_attempts, graph_path, output_path, model_output_path, move_to_cuda)
+        proc = mp.Process(target=run_experiments_on_thread, args=arguments)
+        proc.start()
+        workers.append(proc)
 
     for w in workers:
         w.join()
 
+
+def parse_arguments():
+    main_args = argparse.ArgumentParser()
+    main_args.add_argument('-w', '--num-workers', help='Number of workers to use when running the experiment, each running experiments in parallel.', type=int, default=NUM_WORKERS)
+    main_args.add_argument('-n', '--num-attempts', help='Number of experiment attempts to run per experiment configuration.', type=int, default=NUM_EXPERIMENTS)
+    main_args.add_argument('-g', '--graph-path', help='Path to the graph edgelist file to be used.', type=str, default=GRAPH_PATH)
+    main_args.add_argument('-o', '--output-path', help='Path to store the experiment results.', type=str, default=OUTPUT_PATH)
+    main_args.add_argument('-e', '--experimental-config', help='Path to the hyperparameter search configuration to run experiments from.', type=str, default=EXPERIMENTAL_PATH)
+    main_args.add_argument('-m', '--model-output-path', help='Path to store the trained models from the experiment. If empty string, no model will be stored.', type=str, default=MODEL_OUTPUT_PATH)
+    main_args.add_argument('-c', '--cuda', help='Flag to specify that cuda should be used.', action='store_true')
+    return main_args.parse_args()
+
+
+if __name__ == '__main__':
+    args = parse_arguments()
+
+    num_workers = args.num_workers
+    num_attempts = args.num_attempts
+    graph_path = args.graph_path
+    output_path = args.output_path
+    model_output_path = args.model_output_path
+    experimental_config = json.load(open(args.experimental_config))
+    move_to_cuda = args.cuda and torch.cuda.is_available()
+    run(num_workers, num_attempts, graph_path, output_path, model_output_path, experimental_config, move_to_cuda)
 

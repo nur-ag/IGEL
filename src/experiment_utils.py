@@ -1,4 +1,12 @@
+import json
+import hashlib
 from itertools import product
+
+
+def hash_dictionary(dictionary):
+	as_string = json.dumps(dictionary)
+	hashed = hashlib.md5(as_string.encode())
+	return hashed.hexdigest()
 
 
 def generate_experiment_tuples(experiment_dict):
