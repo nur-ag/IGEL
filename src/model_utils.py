@@ -4,7 +4,7 @@ import torch.optim as optim
 
 from models import EdgeInferenceModel, NegativeSamplingModel
 from learning import GraphNetworkTrainer
-from batching import graph_random_walks, negative_sampling_generator, negative_sampling_batcher
+from batching import graph_random_walks, negative_sampling_generator, negative_sampling_batcher, negative_sampling_cacher
 from embedders import SimpleStructuralEmbedder, GatedStructuralEmbedder
 from structural import StructuralMapper
 
@@ -37,7 +37,8 @@ def lambda_batch_iterator(G, neg_sampling_parameters, training_options, device):
                                          neg_sampling_parameters.window_size, 
                                          neg_sampling_parameters.negatives_per_positive)
     pair_labels = negative_sampling_batcher(ns_gen, training_options.batch_size)
-    all_batches = ((pair, torch.FloatTensor(label).to(device).reshape(-1, 1)) for pair, label in pair_labels)
+    cached_pair_labels = negative_sampling_cacher(pair_labels, training_options.batch_size)
+    all_batches = ((pair, torch.FloatTensor(label).to(device).reshape(-1, 1)) for pair, label in cached_pair_labels)
     return all_batches
 
 

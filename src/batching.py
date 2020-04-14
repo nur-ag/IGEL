@@ -152,6 +152,34 @@ def negative_sampling_batcher(ns_generator, batch_size=512):
         yield (source_list, target_list), labels
                 
 
+def negative_sampling_cacher(ns_batch_generator, batch_size=512, cache_scale=64):
+    source_list = []
+    target_list = []
+    labels = []
+    for (pairs, label) in ns_batch_generator:
+        sources, targets = pairs
+        source_list.extend(sources)
+        target_list.extend(targets)
+        labels.extend(label)
+        if len(source_list) == batch_size * cache_scale:
+            full_list = [t for t in zip(source_list, target_list, labels)]
+            random.shuffle(full_list)
+            while full_list:
+                source, target, label = zip(*full_list[:batch_size])
+                full_list = full_list[batch_size:]
+                yield (source, target), label
+            source_list = []
+            target_list = []
+            labels = []
+    if source_list:
+        full_list = [t for t in zip(source_list, target_list, labels)]
+        random.shuffle(full_list)
+        while full_list:
+            source, target, label = zip(*full_list[:batch_size])
+            full_list = full_list[batch_size:]
+            yield (source, target), label
+
+
 batch_dictionary_mapping = {
     'index': index_samples,
     'degree': degree_sorted_samples,
