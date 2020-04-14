@@ -153,31 +153,21 @@ def negative_sampling_batcher(ns_generator, batch_size=512):
                 
 
 def negative_sampling_cacher(ns_batch_generator, batch_size=512, cache_scale=64):
-    source_list = []
-    target_list = []
-    labels = []
+    next_batches = [(([], []), []) for _ in range(cache_scale)]
     for (pairs, label) in ns_batch_generator:
-        sources, targets = pairs
-        source_list.extend(sources)
-        target_list.extend(targets)
-        labels.extend(label)
-        if len(source_list) == batch_size * cache_scale:
-            full_list = [t for t in zip(source_list, target_list, labels)]
-            random.shuffle(full_list)
-            while full_list:
-                source, target, label = zip(*full_list[:batch_size])
-                full_list = full_list[batch_size:]
-                yield (source, target), label
-            source_list = []
-            target_list = []
-            labels = []
-    if source_list:
-        full_list = [t for t in zip(source_list, target_list, labels)]
-        random.shuffle(full_list)
-        while full_list:
-            source, target, label = zip(*full_list[:batch_size])
-            full_list = full_list[batch_size:]
-            yield (source, target), label
+        source, target = pairs
+        for i, lbl in enumerate(label):
+            index = i % cache_scale
+            batch_tup, batch_label = next_batches[index]
+            batch_src, batch_dst = batch_tup
+            batch_src.append(source[i])
+            batch_dst.append(target[i])
+            batch_label.append(lbl)
+            if len(batch_label) == batch_size:
+                yield (batch_src, batch_dst), batch_label
+                next_batches[index] = (([], []), [])
+    for batch in next_batches:
+        yield batch
 
 
 batch_dictionary_mapping = {
