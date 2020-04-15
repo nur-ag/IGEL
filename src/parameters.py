@@ -49,7 +49,9 @@ class NegativeSamplingParameters():
     def __init__(self,
                  random_walk_length=80,
                  window_size=10,
-                 negatives_per_positive=10):
+                 negatives_per_positive=10,
+                 minimum_negative_distance=2):
         self.random_walk_length = random_walk_length
         self.window_size = window_size
         self.negatives_per_positive = negatives_per_positive
+        self.minimum_negative_distance = minimum_negative_distance

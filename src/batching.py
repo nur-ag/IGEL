@@ -121,21 +121,33 @@ def graph_random_walks(G,
 def negative_sampling_generator(G, 
                                 random_walk_generator, 
                                 window_size=10, 
-                                negatives_per_positive=10):
+                                negatives_per_positive=10,
+                                filter_min_distance=2):
+    def neighbours_at_dist(node, G, distance):
+        neighbours = {node}
+        for _ in range(distance):
+            neighbours |= {n for n in neighbours for neigh in G.neighbors(n)}
+        return neighbours
     indices = [node.index for node in G.vs]
+    indices_filter = {i: neighbours_at_dist(i, G, filter_min_distance) for i in indices}
     for walk in random_walk_generator:
         for i, node in enumerate(walk):
             lower_start = max(0, i - window_size)
             upper_end = min(len(walk), i + window_size + 1)
+
+            indices_choice = indices
+            if filter_min_distance:
+                indices_choice = [idx for idx in indices_choice 
+                                      if idx not in indices_filter[node]]
             for index in range(lower_start, upper_end):
                 if index == i:
                     continue
                 yield node, walk[index], 1
                 for n in range(negatives_per_positive):
-                    yield node, random.choice(indices), 0
+                    yield node, random.choice(indices_choice), 0
 
 
-def negative_sampling_batcher(ns_generator, batch_size=512):
+def negative_sampling_single_batcher(ns_generator, batch_size=512):
     source_list = []
     target_list = []
     labels = []
@@ -152,20 +164,19 @@ def negative_sampling_batcher(ns_generator, batch_size=512):
         yield (source_list, target_list), labels
                 
 
-def negative_sampling_cacher(ns_batch_generator, batch_size=512, cache_scale=64):
+def negative_sampling_batcher(ns_generator, batch_size=512, cache_scale=777):
     next_batches = [(([], []), []) for _ in range(cache_scale)]
-    for (pairs, label) in ns_batch_generator:
-        source, target = pairs
-        for i, lbl in enumerate(label):
-            index = i % cache_scale
-            batch_tup, batch_label = next_batches[index]
-            batch_src, batch_dst = batch_tup
-            batch_src.append(source[i])
-            batch_dst.append(target[i])
-            batch_label.append(lbl)
-            if len(batch_label) == batch_size:
-                yield (batch_src, batch_dst), batch_label
-                next_batches[index] = (([], []), [])
+    for i, data in enumerate(ns_generator):
+        source, target, label = data
+        index = i % cache_scale
+        batch_tup, batch_label = next_batches[index]
+        batch_src, batch_dst = batch_tup
+        batch_src.append(source)
+        batch_dst.append(target)
+        batch_label.append(label)
+        if len(batch_label) == batch_size:
+            yield (batch_src, batch_dst), batch_label
+            next_batches[index] = (([], []), [])
     for batch in next_batches:
         yield batch
 

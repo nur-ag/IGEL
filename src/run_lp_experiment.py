@@ -45,6 +45,7 @@ def load_finished_experiments(experiments_path, experimental_config):
 def create_experiment_params(experiment_dict):
     ns_params = {'random_walk_length', 'window_size', 'negatives_per_positive'}
     ns_dict = {k: v for (k, v) in experiment_dict.items() if k in ns_params}
+    ns_dict['minimum_negative_distance'] = experiment_dict['encoding_distance']
     ns_opt = NegativeSamplingParameters(**ns_dict)
 
     model_params = {'encoding_distance', 'vector_length', 'model_type', 'use_distance_labels', 'gates_steps', 'counts_transform', 'counts_function', 'aggregator_function'}

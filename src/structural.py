@@ -50,10 +50,11 @@ class StructuralMapper:
         if self.device.type == 'cuda':
             matrix = matrix.cuda()
 
-        matrix = matrix - 0.5
+        matrix = (matrix - 0.5) / math.sqrt(matrix_size)
         for i in range(1, total_elements):
             degree = (i % self.max_degree_bound)
-            matrix[i] *= (1 / math.log(degree + 1)) if degree else 0.0
+            distance = (i // self.max_degree_bound)
+            matrix[i] *= (math.exp(distance) / math.log(degree + 1)) if degree else 0.0
         matrix = (matrix - matrix.mean(axis=0)) / matrix.std(axis=0)
         return matrix
 
