@@ -3,3 +3,13 @@
 __pycache__
 output/*.model
 output/*.lock
+*.pt
+*.lock
+*.cache
+*.npy
+*.edgelist
+*.json
+*.tsv
+*.cites
+*.content
+data/*/README

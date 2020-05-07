@@ -91,7 +91,7 @@ def train_node_inference(splits, labels, embedding_model, model_options, trainin
     test_data = None if test_nodes is None else (test_nodes, labels[test_nodes['id']], G_test)
 
     # Prepare the model, loss and optimizer
-    total_labels = labels.shape[-1] if training_options.problem_type != 'multiclass' else labels.max().item() + 1
+    total_labels = labels.shape[-1] if training_options.problem_type != 'multiclass' else (labels.max().item() + 1)
     if inference_options.output_size is None:
         total_labels = 0
     model = NodeInferenceModel(embedding_model, embedding_size, total_labels, hidden_size=inference_options.hidden_size, depth=inference_options.depth, activation=inference_options.activation).to(device)
