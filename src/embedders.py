@@ -53,6 +53,7 @@ class SimpleStructuralEmbedder(nn.Module):
         self.structural_mapper = structural_mapper
         self.counts_transform = counts_transform
         self.device = device
+        self.output_size = vector_size
         self.matrix = nn.Parameter(structural_mapper.mapping_matrix(vector_size), requires_grad=True).to(device)
 
     def forward(self, node_seq, G):

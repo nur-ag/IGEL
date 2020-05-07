@@ -10,9 +10,9 @@ import torch.multiprocessing as mp
 import numpy as np
 from filelock import FileLock
 
-from parameters import IGELParameters, NegativeSamplingParameters, TrainingParameters
+from parameters import TrainingParameters
 from link_prediction import link_prediction_experiment
-from experiment_utils import generate_experiment_tuples, tuple_to_dictionary, hash_dictionary
+from experiment_utils import create_experiment_params, generate_experiment_tuples, tuple_to_dictionary, hash_dictionary, compute_stats
 
 KEY = 'Facebook' 
 #KEY = 'CA-AstroPh'
@@ -20,7 +20,6 @@ GRAPH_PATH = 'data/{}/{}.edgelist'.format(KEY, KEY)
 OUTPUT_PATH = 'output/{}-result.jsonl'.format(KEY)
 MODEL_OUTPUT_PATH = 'output/{}'.format(KEY)
 EXPERIMENTAL_PATH = 'configs/linkPrediction.json'
-OUTPUT_LOCK_PATH = OUTPUT_PATH + '.lock'
 LP_TRAINING_OPTIONS = TrainingParameters(batch_size=2048, learning_rate=0.05, weight_decay=0.0, epochs=30, display_epochs=1, batch_samples_fn='uniform', problem_type='unsupervised')
 
 NUM_WORKERS = 1
@@ -42,35 +41,10 @@ def load_finished_experiments(experiments_path, experimental_config):
     return seen_experiments
 
 
-def create_experiment_params(experiment_dict):
-    ns_params = {'random_walk_length', 'window_size', 'negatives_per_positive'}
-    ns_dict = {k: v for (k, v) in experiment_dict.items() if k in ns_params}
-    ns_dict['minimum_negative_distance'] = experiment_dict['encoding_distance']
-    ns_opt = NegativeSamplingParameters(**ns_dict)
-
-    model_params = {'encoding_distance', 'vector_length', 'model_type', 'use_distance_labels', 'gates_steps', 'counts_transform', 'counts_function', 'aggregator_function'}
-    model_dict = {k: v for (k, v) in experiment_dict.items() if k in model_params}
-    model_dict['gates_length'] = model_dict['vector_length']
-    model_dict['neg_sampling_parameters'] = ns_opt
-    model_options = IGELParameters(**model_dict)
-
-    training_params = {'epochs', 'batch_size', 'learning_rate', 'problem_type', 'batch_samples_fn', 'display_epochs', 'weight_decay'}
-    training_dict = {k: v for (k, v) in experiment_dict.items() if k in training_params}
-    training_options = TrainingParameters(**training_dict)
-    return model_options, training_options
-
-
-def compute_stats(results):
-    return {'min': np.min(results),
-            'max': np.max(results),
-            'std': np.std(results),
-            'avg': np.mean(results)}
-
-
 def run_experiment(experiment, num_attempts, graph_path, model_output_path, move_to_cuda):
     experiment_as_dict = tuple_to_dictionary(experiment)
     experiment_hash = hash_dictionary(experiment_as_dict)[:8]
-    model_options, training_options = create_experiment_params(experiment_as_dict)
+    model_options, training_options, _, _, _ = create_experiment_params(experiment_as_dict)
     device = torch.device('cuda') if move_to_cuda else torch.device('cpu')
 
     results = []

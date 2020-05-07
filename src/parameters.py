@@ -1,4 +1,45 @@
 from batching import batch_dictionary_mapping
+from aggregators import attention_concat, attention_sum, attention_mean, attention_max, combine_sum, combine_mean, combine_max
+import torch.nn as nn
+
+
+ACTIVATIONS = {
+    'elu': nn.ELU, 
+    'relu': nn.ReLU, 
+    'gelu': nn.GELU, 
+    'relu6': nn.ReLU6, 
+    'tanh': nn.Tanh, 
+    'sigmoid': nn.Sigmoid, 
+    'softmax': nn.Softmax,
+    'linear': nn.Identity
+}
+
+ATTENTION_AGGREGATIONS = {
+    'max': attention_max,
+    'sum': attention_sum,
+    'mean': attention_mean,
+    'concat': attention_concat,
+}
+
+AGGREGATIONS = {
+    'max': combine_max,
+    'sum': combine_sum,
+    'mean': combine_mean,
+}
+
+
+class DeepNNParameters():
+    def __init__(self,
+                 input_size=64, 
+                 hidden_size=64, 
+                 output_size=64, 
+                 depth=1, 
+                 activation='relu'):
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.depth = depth
+        self.activation = ACTIVATIONS.get(activation, activation)
 
 
 class IGELParameters():
@@ -23,6 +64,30 @@ class IGELParameters():
         self.aggregator_function = aggregator_function
         self.neg_sampling_parameters = neg_sampling_parameters
         self.counts_transform = counts_transform
+
+
+class AggregationParameters():
+    def __init__(self, 
+                 node_dropouts=[],         # [0.0, 0.0, 0.5], 
+                 output_sizes=[],          # [20, 20, 6],
+                 activations=[],           # ['elu', 'elu', 'elu'],
+                 aggregations=[],          # ['sum', 'max', 'concat'],
+                 include_nodes=[],         # [False, False, True],
+                 nodes_to_sample=[],       # [0, 0, 5],
+                 num_attention_heads=[],   # [0, 0, 6],
+                 attention_aggregators=[], # ['concat', 'concat', 'concat'],
+                 attention_dropouts=[]):   # [0.0, 0.0, 0.5]
+        self.node_dropouts = node_dropouts
+        self.output_sizes = output_sizes
+        self.activations = [ACTIVATIONS.get(act, act) for act in activations]
+        self.aggregations = [AGGREGATIONS.get(agg, agg) for agg in aggregations]
+        self.include_nodes = include_nodes
+        self.nodes_to_sample = nodes_to_sample
+        self.num_attention_heads = num_attention_heads
+        self.attention_aggregators = [ATTENTION_AGGREGATIONS.get(att_agg, att_agg) 
+                                      for att_agg in attention_aggregators]
+        self.attention_outputs_per_heads = [att_agg == attention_concat for att_agg in self.attention_aggregators]
+        self.attention_dropouts = attention_dropouts
 
 
 class TrainingParameters():

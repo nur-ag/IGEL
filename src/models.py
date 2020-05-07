@@ -3,15 +3,23 @@ import torch.nn as nn
 
 
 class NodeInferenceModel(nn.Module):
-    def __init__(self, graph_model, graph_outs, num_labels):
+    def __init__(self, graph_model, graph_outs, num_outs, hidden_size=64, depth=1, activation=nn.ReLU):
         super(NodeInferenceModel, self).__init__()
         self.graph_model = graph_model
-        self.out = nn.Linear(graph_outs, num_labels)
+        layers = []
+        for i in range(depth):
+            input_size = graph_outs if i == 0 else hidden_size
+            output_size = hidden_size if i < depth - 1 else num_outs
+            layers.append(nn.Linear(input_size, output_size))
+            if i < depth - 1:
+                layers.append(activation())
+        self.out = nn.Sequential(*layers) if layers else None
 
     def forward(self, node_seq, G):
         g_out = self.graph_model(node_seq, G)
-        out = self.out(g_out)
-        return out
+        if self.out is not None:
+            return self.out(g_out)
+        return g_out
 
 
 class NegativeSamplingModel(nn.Module):

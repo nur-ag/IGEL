@@ -1,0 +1,23 @@
+{
+    "epochs": 5,
+    "batch_size": 50000,
+    "learning_rate": 0.01,
+    "problem_type": "unsupervised",
+    "batch_samples_fn": "uniform",
+    "display_epochs": 1,
+    "weight_decay": 0.0,
+    "random_walk_length": 200,
+    "window_size": 10,
+    "negatives_per_positive": 10,
+    "minimum_negative_distance": 1,
+    "encoding_distance": 3,
+    "vector_length": 8,
+    "model_type": "simple",
+    "use_distance_labels": true,
+    "gates_steps": 2,
+    "counts_transform": "log",
+    "counts_function": "scale_norm",
+    "aggregator_function": "sum",
+    "use_seed": false,
+    "freeze_embeddings": true
+}

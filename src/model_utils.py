@@ -6,7 +6,44 @@ from models import EdgeInferenceModel, NegativeSamplingModel
 from learning import GraphNetworkTrainer
 from batching import graph_random_walks, negative_sampling_generator, negative_sampling_batcher
 from embedders import SimpleStructuralEmbedder, GatedStructuralEmbedder
+from aggregators import SamplingAggregator
 from structural import StructuralMapper
+
+
+def make_aggregation_model(embedding_model, embedding_size, options, device):
+    model = embedding_model
+    if options is None:
+        return model, embedding_size
+    zipped_params = zip(options.node_dropouts,
+                        options.output_sizes,
+                        options.activations,
+                        options.aggregations,
+                        options.include_nodes,
+                        options.nodes_to_sample,
+                        options.num_attention_heads,
+                        options.attention_aggregators,
+                        options.attention_outputs_per_heads,
+                        options.attention_dropouts)
+    current_features = embedding_size
+    for (dropout, output_size, activation, agg_fn, include_node, nodes_to_sample, 
+         att_heads, att_agg, att_outputs_per_head, att_dropout) in zipped_params:
+        model = SamplingAggregator(model, 
+                                   current_features, 
+                                   aggregation=agg_fn,
+                                   hidden_units=0,
+                                   num_hidden=0,
+                                   output_units=output_size,
+                                   activation=activation,
+                                   node_dropout=dropout,
+                                   num_attention_heads=att_heads,
+                                   nodes_to_sample=nodes_to_sample,
+                                   include_node=include_node,
+                                   attention_aggregator=att_agg,
+                                   attention_outputs_by_head=att_outputs_per_head,
+                                   attention_dropout=att_dropout).to(device)
+        current_features = max(1, att_heads if att_outputs_per_head else 1) * output_size + (current_features * include_node)
+
+    return model, current_features
 
 
 def make_structural_model(G, options, device):
@@ -35,7 +72,8 @@ def lambda_batch_iterator(G, neg_sampling_parameters, training_options, device):
     ns_gen = negative_sampling_generator(G, 
                                          batch_gen, 
                                          neg_sampling_parameters.window_size, 
-                                         neg_sampling_parameters.negatives_per_positive)
+                                         neg_sampling_parameters.negatives_per_positive,
+                                         neg_sampling_parameters.minimum_negative_distance)
     pair_labels = negative_sampling_batcher(ns_gen, training_options.batch_size)
     all_batches = ((pair, torch.FloatTensor(label).to(device).reshape(-1, 1)) for pair, label in pair_labels)
     return all_batches
