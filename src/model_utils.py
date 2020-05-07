@@ -40,7 +40,10 @@ def make_aggregation_model(embedding_model, embedding_size, options, device):
                                    include_node=include_node,
                                    attention_aggregator=att_agg,
                                    attention_outputs_by_head=att_outputs_per_head,
-                                   attention_dropout=att_dropout).to(device)
+                                   attention_dropout=att_dropout,
+                                   peeking_units=0,
+                                   number_of_peeks=0,
+                                   device=device).to(device)
         current_features = max(1, att_heads if att_outputs_per_head else 1) * output_size + (current_features * include_node)
 
     return model, current_features
