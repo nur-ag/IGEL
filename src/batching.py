@@ -1,5 +1,6 @@
 import math
 import random
+from multiprocessing import Pool, cpu_count
 
 
 def chunks(source, chunk_size):
@@ -107,15 +108,23 @@ def random_walk(node, G, length):
             break
 
 
+def random_walk_list(data_tuple):
+    node, G, length, random_walk_fn = data_tuple
+    return [n for n in random_walk_fn(node, G, length)]
+
+
 def graph_random_walks(G, 
                        random_walk_length=80,
                        batch_size=512, 
                        node_sampling_fn=index_samples,
-                       random_walk_fn=random_walk):
+                       random_walk_fn=random_walk,
+                       num_workers=cpu_count()):
     node_generator = node_sampling_fn(G, G.vs, batch_size)
     for chunk in node_generator:
-        for node in chunk:
-            yield [n for n in random_walk_fn(node, G, random_walk_length)]
+        with Pool(num_workers) as p:
+            chunk_walks = p.map(random_walk_list, [(node, G, random_walk_length, random_walk_fn) for node in chunk])
+            for walk in chunk_walks:
+                yield walk
 
 
 def negative_sampling_generator(G, 
