@@ -1,3 +1,4 @@
+import math
 import random
 import igraph as ig
 
@@ -11,8 +12,10 @@ def load_graph(path, directed=False, weights=False):
 def precompute_graph_features(G):
     G.vs['pagerank'] = G.pagerank()
     G.vs['betweenness'] = G.betweenness()
+    G.vs['closeness'] = G.closeness()
+    G.vs['eigen'] = G.evcent()
     G.vs['degree'] = G.degree()
-    G.vs['log_degree'] = [np.log(d) + 1 for d in G.degree()]
+    G.vs['log_degree'] = [math.log(d) + 1 for d in G.degree()]
     G.vs['clust_coeff'] = G.transitivity_local_undirected(mode='zero')
     return G
 

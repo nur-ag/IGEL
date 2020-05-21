@@ -47,7 +47,7 @@ def clustering_experiment(graph_path,
     clustering_model = KMeans(**cluster_kwargs).fit(embeddings)
     node_clusters = clustering_model.predict(embeddings)
     node_clusters = {node_ids[i]: int(value) for i, value in enumerate(node_clusters)}
-    return clustering_model, node_clusters
+    return trained_model, clustering_model, node_clusters
 
 
 def parse_arguments():
@@ -70,11 +70,11 @@ if __name__ == '__main__':
     with open(args.experiment_config, 'r') as f:
         experiment_as_dict = json.load(f)
 
-    model_config, training_config = create_experiment_params(experiment_as_dict)
-    model, clusters = clustering_experiment(graph_path, 
-                                            model_config, 
-                                            training_config, 
-                                            cluster_kwargs={'n_clusters': num_clusters})
+    model_config, training_config, _, _, _ = create_experiment_params(experiment_as_dict)
+    embedding_model, clustering_model, node_clusters = clustering_experiment(graph_path, 
+                                                                             model_config, 
+                                                                             training_config, 
+                                                                             cluster_kwargs={'n_clusters': num_clusters})
 
     with open(output_path, 'w') as f:
         for node_id, cluster in clusters.items():

@@ -1,4 +1,5 @@
 import math
+import json
 import torch
 import torch.nn.init as init
 from multiprocessing import cpu_count, Pool
@@ -103,3 +104,17 @@ class StructuralMapper:
 
         return node_seq[self.cache_field]
 
+    def cache_mapping(self, G, cache_path):
+        node_mapping = self.mapping(G.vs, G)
+        with open(cache_path, 'w') as f:
+            for mapping in node_mapping:
+                json_mapping = json.dumps(mapping)
+                f.write('{}\n'.format(json_mapping))
+
+    def load_mapping(self, G, cache_path):
+        mapping = []
+        with open(cache_path, 'r') as f:
+            for line in f:
+                indices, counts = json.loads(line)
+                mapping.append((indices, counts))
+        G.vs[self.cache_field] = mapping

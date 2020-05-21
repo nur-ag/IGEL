@@ -52,6 +52,21 @@ CHECKPOINT_PATH = '{}/{}.checkpoint.pt'.format(GRAPH_PATH, GRAPH_KEY)
 EARLY_STOPPING = EarlyStopping(patience=50, file_path=CHECKPOINT_PATH, metric=EARLY_STOPPING_METRIC, minimum_change=0.0, metric_sign=1 if EARLY_STOPPING_METRIC == 'valid_loss' else -1)
 
 
+def precache_splits(splits, data_path, data_prefix, mapper, split_by_nodes):
+    for split_name, split_data in splits.items():
+        G_split, _ = split_data
+        split_cache_path = '{}/{}.igel-cache-{}-{}'.format(data_path, 
+                                                           data_prefix, 
+                                                           mapper.distance, 
+                                                           'dist' if mapper.use_distances else 'no_dist')
+        if not split_by_nodes:
+            split_cache_path = '{}.{}'.format(split_cache_path, split_name)
+        split_cache_path = '{}.json'.format(split_cache_path)
+        if not os.path.exists(split_cache_path):
+            mapper.cache_mapping(G_split, split_cache_path)    
+        mapper.load_mapping(G_split, split_cache_path)
+
+
 def load_node_splits(graph_path, splits_path):
     G = load_graph(graph_path)
     id_to_idx = {node['id']: node.index for node in G.vs}
@@ -158,6 +173,7 @@ def node_inference_experiment(data_path,
     # Train and freeze the model if we follow the unsupervised representation setting
     structural_size = igel_model.output_size
     if structural_size > 0 and model_options.neg_sampling_parameters is not None and unsupervised_training_options is not None:
+        precache_splits(splits, data_path, data_prefix, mapper, split_by_nodes)
         igel_model = train_negative_sampling(G_train, igel_model, model_options.neg_sampling_parameters, unsupervised_training_options, device)
 
         if freeze_structural_model:
