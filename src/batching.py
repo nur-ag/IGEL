@@ -118,30 +118,34 @@ def graph_random_walks(G,
                        batch_size=512, 
                        node_sampling_fn=index_samples,
                        random_walk_fn=random_walk,
-                       num_workers=cpu_count()):
+                       num_workers=1):
     node_generator = node_sampling_fn(G, G.vs, batch_size)
     for chunk in node_generator:
-        with Pool(num_workers) as p:
-            chunk_walks = p.map(random_walk_list, [(node, G, random_walk_length, random_walk_fn) for node in chunk])
-            for walk in chunk_walks:
-                yield walk
+        if num_workers <= 1:
+            for node in chunk:
+                yield list(random_walk_fn(node, G, random_walk_length))
+        else:
+            with Pool(num_workers) as p:
+                chunk_walks = p.map(random_walk_list, [(node, G, random_walk_length, random_walk_fn) for node in chunk])
+                for walk in chunk_walks:
+                    yield walk
 
 
 def negative_sample_walk(walk, window_size, negatives_per_positive, indices, indices_filter):
-        for i, node in enumerate(walk):
-            lower_start = max(0, i - window_size)
-            upper_end = min(len(walk), i + window_size + 1)
+    for i, node in enumerate(walk):
+        lower_start = max(0, i - window_size)
+        upper_end = min(len(walk), i + window_size + 1)
 
-            indices_choice = indices
-            if indices_filter[node]:
-                indices_choice = [idx for idx in indices_choice 
-                                      if idx not in indices_filter[node]]
-            for index in range(lower_start, upper_end):
-                if index == i:
-                    continue
-                yield node, walk[index], 1
-                for n in range(negatives_per_positive):
-                    yield node, random.choice(indices_choice), 0
+        indices_choice = indices
+        if indices_filter[node]:
+            indices_choice = [idx for idx in indices_choice 
+                                  if idx not in indices_filter[node]]
+        for index in range(lower_start, upper_end):
+            if index == i:
+                continue
+            yield node, walk[index], 1
+            for n in range(negatives_per_positive):
+                yield node, random.choice(indices_choice), 0
 
 
 def negative_sample_walk_list(data_tuple):
