@@ -125,10 +125,12 @@ def graph_random_walks(G,
             for node in chunk:
                 yield list(random_walk_fn(node, G, random_walk_length))
         else:
-            with Pool(num_workers) as p:
-                chunk_walks = p.map(random_walk_list, [(node, G, random_walk_length, random_walk_fn) for node in chunk])
-                for walk in chunk_walks:
-                    yield walk
+            p = Pool(num_workers)
+            chunk_walks = p.map(random_walk_list, [(node, G, random_walk_length, random_walk_fn) for node in chunk])
+            for walk in chunk_walks:
+                yield walk
+            p.close()
+            p.join()
 
 
 def negative_sample_walk(walk, window_size, negatives_per_positive, indices, indices_filter):
@@ -157,7 +159,7 @@ def negative_sampling_generator(G,
                                 window_size=10, 
                                 negatives_per_positive=10,
                                 filter_min_distance=2, 
-                                chunk_size=500,
+                                chunk_size=1000,
                                 num_workers=cpu_count()):
     def neighbours_at_dist(node, G, distance):
         neighbours = {node}
@@ -168,11 +170,13 @@ def negative_sampling_generator(G,
     indices = [node.index for node in G.vs]
     indices_filter = {i: neighbours_at_dist(i, G, filter_min_distance) for i in indices}
     def process_walk_chunk(walk_chunks):
-        with Pool(num_workers) as p:
-            walk_tuples = p.map(negative_sample_walk_list, 
-                                [(walk, window_size, negatives_per_positive, indices, indices_filter) 
-                                  for walk in walk_chunks])
-            return walk_tuples
+        p = Pool(num_workers)
+        walk_tuples = p.map(negative_sample_walk_list, 
+                            [(walk, window_size, negatives_per_positive, indices, indices_filter) 
+                              for walk in walk_chunks])
+        p.close()
+        p.join()
+        return walk_tuples
     walk_chunks = []
     for walk in random_walk_generator:
         walk_chunks.append(walk)
