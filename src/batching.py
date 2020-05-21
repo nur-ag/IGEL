@@ -127,25 +127,13 @@ def graph_random_walks(G,
                 yield walk
 
 
-def negative_sampling_generator(G, 
-                                random_walk_generator, 
-                                window_size=10, 
-                                negatives_per_positive=10,
-                                filter_min_distance=2):
-    def neighbours_at_dist(node, G, distance):
-        neighbours = {node}
-        for _ in range(distance):
-            neighbours |= {n for n in neighbours for neigh in G.neighbors(n)}
-        return neighbours
-    indices = [node.index for node in G.vs]
-    indices_filter = {i: neighbours_at_dist(i, G, filter_min_distance) for i in indices}
-    for walk in random_walk_generator:
+def negative_sample_walk(walk, window_size, negatives_per_positive, indices, indices_filter):
         for i, node in enumerate(walk):
             lower_start = max(0, i - window_size)
             upper_end = min(len(walk), i + window_size + 1)
 
             indices_choice = indices
-            if filter_min_distance:
+            if indices_filter[node]:
                 indices_choice = [idx for idx in indices_choice 
                                       if idx not in indices_filter[node]]
             for index in range(lower_start, upper_end):
@@ -154,6 +142,44 @@ def negative_sampling_generator(G,
                 yield node, walk[index], 1
                 for n in range(negatives_per_positive):
                     yield node, random.choice(indices_choice), 0
+
+
+def negative_sample_walk_list(data_tuple):
+    return [ns_tuple for ns_tuple in negative_sample_walk(*data_tuple)]
+
+
+def negative_sampling_generator(G, 
+                                random_walk_generator, 
+                                window_size=10, 
+                                negatives_per_positive=10,
+                                filter_min_distance=2, 
+                                chunk_size=16000,
+                                num_workers=cpu_count()):
+    def neighbours_at_dist(node, G, distance):
+        neighbours = {node}
+        for _ in range(distance):
+            neighbours |= {n for n in neighbours for neigh in G.neighbors(n)}
+        return neighbours
+
+    indices = [node.index for node in G.vs]
+    indices_filter = {i: neighbours_at_dist(i, G, filter_min_distance) for i in indices}
+    def process_walk_chunk(walk_chunks):
+        with Pool(num_workers) as p:
+            walk_tuples = p.map(negative_sample_walk_list, 
+                                [(walk, window_size, negatives_per_positive, indices, indices_filter) 
+                                  for walk in walk_chunks])
+            return walk_tuples
+    walk_chunks = []
+    for walk in random_walk_generator:
+        walk_chunks.append(walk)
+        if len(walk_chunks) == chunk_size:
+            for chunk in process_walk_chunk(walk_chunks):
+                for ns_tuple in chunk:
+                    yield ns_tuple
+            walk_chunks.clear()
+    for chunk in process_walk_chunk(walk_chunks):
+        for ns_tuple in chunk:
+            yield ns_tuple
 
 
 def negative_sampling_single_batcher(ns_generator, batch_size=512):
