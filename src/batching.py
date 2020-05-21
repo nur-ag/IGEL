@@ -157,7 +157,7 @@ def negative_sampling_generator(G,
                                 window_size=10, 
                                 negatives_per_positive=10,
                                 filter_min_distance=2, 
-                                chunk_size=16000,
+                                chunk_size=500,
                                 num_workers=cpu_count()):
     def neighbours_at_dist(node, G, distance):
         neighbours = {node}
