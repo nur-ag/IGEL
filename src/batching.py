@@ -49,8 +49,7 @@ def random_bfs_samples(G, split_indices, batch_size):
     seen_indices = set()
     current_batch = []
     while len(seen_indices) < total_indices:
-        indices = [node.index for node in split_indices
-                   if node not in seen_indices]
+        indices = [node for node in indices if node not in seen_indices]
         if not indices:
             break
         src = random.choice(indices)
