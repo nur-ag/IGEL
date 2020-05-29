@@ -45,7 +45,7 @@ def uniformly_random_samples(G, split_indices, batch_size):
 def random_bfs_samples(G, split_indices, batch_size):
     indices = [n.index for n in split_indices]
     indices_in_split = set(indices)
-    total_indices = len(G.vs)
+    total_indices = len(indices_in_split)
     seen_indices = set()
     current_batch = []
     while len(seen_indices) < total_indices:
@@ -55,9 +55,6 @@ def random_bfs_samples(G, split_indices, batch_size):
             break
         src = random.choice(indices)
         for node in G.bfsiter(src):
-            if len(current_batch) == batch_size:
-                yield current_batch
-                current_batch = []
             new_index = node.index
             if new_index not in indices_in_split:
                 continue
@@ -65,6 +62,9 @@ def random_bfs_samples(G, split_indices, batch_size):
                 break
             seen_indices.add(new_index)
             current_batch.append(new_index)
+            if len(current_batch) == batch_size:
+                yield current_batch
+                current_batch = []
     if current_batch:
         yield current_batch
 
