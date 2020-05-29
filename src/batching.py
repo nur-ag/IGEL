@@ -55,14 +55,16 @@ def random_bfs_samples(G, split_indices, batch_size):
             break
         src = random.choice(indices)
         for node in G.bfsiter(src):
-            new_index = node.index
-            if new_index in seen_indices or new_index not in indices_in_split:
-                continue
-            seen_indices.add(new_index)
-            current_batch.append(new_index)
             if len(current_batch) == batch_size:
                 yield current_batch
                 current_batch = []
+            new_index = node.index
+            if new_index not in indices_in_split:
+                continue
+            if new_index in seen_indices:
+                break
+            seen_indices.add(new_index)
+            current_batch.append(new_index)
     if current_batch:
         yield current_batch
 

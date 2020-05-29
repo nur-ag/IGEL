@@ -92,3 +92,39 @@ def generate_negative_edges(positive_edges, G, num_samples=1):
         negative_edges.append(negative_edge)
     return negative_edges
 
+
+def clone_bridge_graph(G, num_copies=1, bridges_with_copies=1, link_copies=False):
+    total_nodes = len(G.vs)
+    ids = G.vs['id'] * (num_copies + 1)
+    names = G.vs['name'] * (num_copies + 1)
+
+    # Clone the graph with all the attributes
+    G = G.copy()
+    G.add_vertices(total_nodes * num_copies)
+    G.vs['id'] = ids
+    G.vs['name'] = names
+
+    # Clone the corresponding edges
+    G.add_edges([(src + copy * total_nodes, dst + copy * total_nodes) 
+                        for (src, dst) in G.get_edgelist() 
+                        for copy in range(1, num_copies + 1)])
+
+    # Create all the bridges
+    if bridges_with_copies > 0:
+        bridge_edges = []
+        for copy_index in range(num_copies):
+            start_shifts = 1
+            if link_copies:
+                start_shifts = num_copies + 1
+            for graph_index in range(start_shifts):
+                if graph_index > copy_index:
+                    break
+                src_shift = graph_index * total_nodes
+                dst_shift = (1 + copy_index) * total_nodes
+                for bridge in range(bridges_with_copies):
+                    src_index = random.randint(0, total_nodes - 1) + src_shift
+                    dst_index = random.randint(0, total_nodes - 1) + dst_shift
+                    bridge_edges.append((src_index, dst_index))
+        G.add_edges(bridge_edges)
+    return G
+
