@@ -24,7 +24,7 @@ DEVICE = GPU if len(sys.argv) > 1 and sys.argv[1] == 'gpu' else CPU
 
 NUM_EPOCHS = 5
 NUM_EXPERIMENTS = 10
-BATCH_SIZE = 500000
+BATCH_SIZE = 100000
 EXPERIMENT_SEEDS = [x for x in range(1, NUM_EXPERIMENTS + 1)]
 GRAPH_NODES = [100, 1000, 10000, 100000, 1000000]
 EDGE_AMOUNTS = [2, 4, 8, 16, 32]
@@ -32,7 +32,7 @@ ENCODING_DISTANCES = [1, 2, 3, 4]
 
 
 def make_parameters(encoding_distance):
-    ns_parameters = NegativeSamplingParameters(random_walk_length=20,
+    ns_parameters = NegativeSamplingParameters(random_walk_length=50,
                                                window_size=5,
                                                negatives_per_positive=5,
                                                minimum_negative_distance=1)
