@@ -96,12 +96,14 @@ def generate_negative_edges(positive_edges, G, num_samples=1):
 def clone_bridge_graph(G, num_copies=1, bridges_with_copies=1, link_copies=False):
     total_nodes = len(G.vs)
     ids = G.vs['id'] * (num_copies + 1)
+    ids_remapped = [num_id + (i // total_nodes) * total_nodes for i, num_id in enumerate(ids)]
     names = G.vs['name'] * (num_copies + 1)
 
     # Clone the graph with all the attributes
     G = G.copy()
     G.add_vertices(total_nodes * num_copies)
-    G.vs['id'] = ids
+    G.vs['id'] = ids_remapped
+    G.vs['id_original'] = ids
     G.vs['name'] = names
 
     # Clone the corresponding edges

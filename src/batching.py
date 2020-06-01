@@ -209,6 +209,7 @@ def negative_sampling_single_batcher(ns_generator, batch_size=512):
                 
 
 def negative_sampling_batcher(ns_generator, batch_size=512, cache_scale=777):
+    # Yield buckets as they get filled to the desired batch size
     next_batches = [(([], []), []) for _ in range(cache_scale)]
     for i, data in enumerate(ns_generator):
         source, target, label = data
@@ -221,8 +222,25 @@ def negative_sampling_batcher(ns_generator, batch_size=512, cache_scale=777):
         if len(batch_label) == batch_size:
             yield (batch_src, batch_dst), batch_label
             next_batches[index] = (([], []), [])
-    for batch in next_batches:
-        yield batch
+
+    # There are remaining non-full buckets -- put them together and yield them
+    batch_src = []
+    batch_dst = []
+    batch_label = []
+    for (batch_tup, batch_label_part) in next_batches:
+        batch_src_part, batch_dst_part = batch_tup
+        batch_src.extend(batch_src_part)
+        batch_dst.extend(batch_dst_part)
+        batch_label.extend(batch_label_part)
+        if len(batch_src) >= batch_size:
+            yield (batch_src[:batch_size], batch_dst[:batch_size]), batch_label[:batch_size]
+            batch_src = batch_src[batch_size:]
+            batch_dst = batch_dst[batch_size:]
+            batch_label = batch_label[batch_size:]
+
+    # If there is an uneven last batch, yield it 
+    if batch_src:
+        yield (batch_src, batch_dst), batch_label
 
 
 batch_dictionary_mapping = {
