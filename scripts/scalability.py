@@ -22,13 +22,13 @@ CPU = torch.device('cpu')
 CUDA = torch.device('cuda')
 DEVICE = GPU if len(sys.argv) > 1 and sys.argv[1] == 'gpu' else CPU
 
-NUM_EPOCHS = 5
-NUM_EXPERIMENTS = 10
-BATCH_SIZE = 100000
+NUM_EPOCHS = 3
+NUM_EXPERIMENTS = 5
+BATCH_SIZE = 25000
 EXPERIMENT_SEEDS = [x for x in range(1, NUM_EXPERIMENTS + 1)]
-GRAPH_NODES = [100, 1000, 10000, 100000, 1000000]
-EDGE_AMOUNTS = [2, 4, 8, 16, 32]
-ENCODING_DISTANCES = [1, 2, 3, 4]
+GRAPH_NODES = [64, 256, 1024, 4096, 16384, 65536]
+EDGE_AMOUNTS = [2, 4, 8, 16]
+ENCODING_DISTANCES = [1, 2, 3]
 
 
 def make_parameters(encoding_distance):
@@ -91,7 +91,7 @@ def run_experiment_set(num_nodes,
 experiment_data = [product_tuple for product_tuple in product(GRAPH_NODES, EDGE_AMOUNTS, ENCODING_DISTANCES)]
 try:
     env_var = os.environ['SLURM_ARRAY_TASK_ID']
-    task_index = int(env_var) - 1
+    task_index = int(env_var)
     num_nodes, num_edges, encoding_distance = experiment_data[task_index]
     results = run_experiment_set(num_nodes, num_edges, encoding_distance)
     for result_dict in results:
