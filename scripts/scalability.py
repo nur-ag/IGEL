@@ -56,6 +56,7 @@ def make_parameters(encoding_distance):
 def run_timed_experiment(G, igel_parameters, training_parameters, device):
     start_time = time.time()
     mapper, model = make_structural_model(G, igel_parameters, device)
+    mapper.pack_as_arrays = True
     trained_model = train_negative_sampling(G, model, igel_parameters.neg_sampling_parameters, training_parameters, device)
     end_time = time.time()
     return end_time - start_time

@@ -1,5 +1,6 @@
 import math
 import json
+import numpy as np
 import torch
 import torch.nn.init as init
 from multiprocessing import cpu_count, Pool
@@ -30,6 +31,7 @@ class StructuralMapper:
                  use_distances=False,
                  num_workers=cpu_count(),
                  cache_field='neigh_deg',
+                 pack_as_arrays=False,
                  device=None):
         self.distance = distance
         self.use_distances = use_distances
@@ -38,6 +40,11 @@ class StructuralMapper:
         self.max_degree_bound = max(G.degree()) + 1
         self.source_G = G
         self.device = device
+        self.pack_as_arrays = pack_as_arrays
+
+    def pack_mapping_as_array(self, mapping):
+        degree, count = mapping
+        return np.asarray([degree, count], dtype=np.int32)
 
     def num_elements(self):
         return (self.distance + 1) * self.max_degree_bound
@@ -72,6 +79,8 @@ class StructuralMapper:
                                                     G, 
                                                     self.use_distances, 
                                                     self.max_degree_bound)
+                if self.pack_as_arrays:
+                    mapping = self.pack_mapping_as_array(mapping)
                 deg_seq.append(mapping)
         else:
             pool = Pool(processes=self.num_workers)
@@ -89,14 +98,17 @@ class StructuralMapper:
             # Map back to the original values
             per_node = {n: v for (n, v) in chunk_res}
             deg_seq = [per_node[node.index] for node in node_seq]
+            if self.pack_as_arrays:
+                deg_seq = [self.pack_mapping_as_array(mapping) for mapping in deg_seq]
         return deg_seq
 
     def mapping(self, node_seq, G):
         if self.cache_field not in G.vs.attribute_names():
             G.vs[self.cache_field] = [None for node in G.vs]
 
-        if node_seq[self.cache_field] and None not in node_seq[self.cache_field]:
-            return node_seq[self.cache_field]
+        node_seq_data = node_seq[self.cache_field]
+        if any(x is None for x in node_seq_data):
+            return node_seq_data
 
         unmapped = [node for node in node_seq if node[self.cache_field] is None]
         for node, deg in zip(unmapped, self.compute_mapping(unmapped, G)):
@@ -108,13 +120,14 @@ class StructuralMapper:
         node_mapping = self.mapping(G.vs, G)
         with open(cache_path, 'w') as f:
             for mapping in node_mapping:
-                json_mapping = json.dumps(mapping)
+                json_mapping = json.dumps(mapping.tolist())
                 f.write('{}\n'.format(json_mapping))
 
     def load_mapping(self, G, cache_path):
         mapping = []
         with open(cache_path, 'r') as f:
             for line in f:
-                indices, counts = json.loads(line)
-                mapping.append((indices, counts))
+                values = json.loads(line)
+                packed_values = self.pack_mapping_as_array(values)
+                mapping.append(packed_values)
         G.vs[self.cache_field] = mapping
