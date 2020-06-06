@@ -131,6 +131,6 @@ class StructuralMapper:
             for line in f:
                 values = json.loads(line)
                 if self.pack_as_arrays:
-                    packed_values = self.pack_mapping_as_array(values)
-                mapping.append(packed_values)
+                    values = self.pack_mapping_as_array(values)
+                mapping.append(values)
         G.vs[self.cache_field] = mapping
