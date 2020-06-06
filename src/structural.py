@@ -44,7 +44,8 @@ class StructuralMapper:
 
     def pack_mapping_as_array(self, mapping):
         degree, count = mapping
-        return np.asarray([degree, count], dtype=np.int32)
+        return (np.asarray(degree, dtype=np.int32),
+                np.asarray(count, dtype=np.int32))
 
     def num_elements(self):
         return (self.distance + 1) * self.max_degree_bound
@@ -106,8 +107,9 @@ class StructuralMapper:
         if self.cache_field not in G.vs.attribute_names():
             G.vs[self.cache_field] = [None for node in G.vs]
 
+        # If the fields are defined for all, just return
         node_seq_data = node_seq[self.cache_field]
-        if any(x is None for x in node_seq_data):
+        if node_seq_data is not None and len(node_seq_data) and None not in node_seq_data:
             return node_seq_data
 
         unmapped = [node for node in node_seq if node[self.cache_field] is None]
@@ -120,9 +122,10 @@ class StructuralMapper:
         node_mapping = self.mapping(G.vs, G)
         with open(cache_path, 'w') as f:
             for mapping in node_mapping:
-                json_mapping = json.dumps(mapping)
                 if self.pack_as_arrays:
-                    json_mapping = json.dumps(mapping.tolist())
+                    degree, count = mapping
+                    mapping = [mapping.tolist(), count.tolist()]
+                json_mapping = json.dumps(mapping)
                 f.write('{}\n'.format(json_mapping))
 
     def load_mapping(self, G, cache_path):
