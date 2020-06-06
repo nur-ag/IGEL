@@ -120,7 +120,9 @@ class StructuralMapper:
         node_mapping = self.mapping(G.vs, G)
         with open(cache_path, 'w') as f:
             for mapping in node_mapping:
-                json_mapping = json.dumps(mapping.tolist())
+                json_mapping = json.dumps(mapping)
+                if self.pack_as_arrays:
+                    json_mapping = json.dumps(mapping.tolist())
                 f.write('{}\n'.format(json_mapping))
 
     def load_mapping(self, G, cache_path):
@@ -128,6 +130,7 @@ class StructuralMapper:
         with open(cache_path, 'r') as f:
             for line in f:
                 values = json.loads(line)
-                packed_values = self.pack_mapping_as_array(values)
+                if self.pack_as_arrays:
+                    packed_values = self.pack_mapping_as_array(values)
                 mapping.append(packed_values)
         G.vs[self.cache_field] = mapping
