@@ -3,7 +3,7 @@
     "hidden_size": [512],
     "output_size": [121],
     "depth": [3],
-    "activation": ["linear"],
+    "activation": ["elu"],
     "node_dropouts": [[]], 
     "output_sizes": [[]],
     "activations": [[]],

@@ -7,7 +7,7 @@ echo "##########################################################################
 
 # Link Prediction -- Facebook
 python src/run_lp_experiment.py \
-       -w 1 -n 10 -c \
+       -w 1 -n 5 -c \
        -e configs/replication/linkPrediction-Facebook.json \
        -g data/Facebook/Facebook.edgelist \
        -o output/Facebook-result.jsonl \
@@ -15,7 +15,7 @@ python src/run_lp_experiment.py \
 
 # Link Prediction -- Arxiv AstroPhysics
 python src/run_lp_experiment.py \
-       -w 1 -n 10 -c \
+       -w 1 -n 5 -c \
        -e configs/replication/linkPrediction-AstroPh.json \
        -g data/CA-AstroPh/CA-AstroPh.edgelist \
        -o output/CA-AstroPh-result.jsonl \
@@ -24,7 +24,7 @@ python src/run_lp_experiment.py \
 # Classification -- PPI
 # Only Features MLP (Baseline)
 python src/run_node_inference_experiment.py \
-       -w 1 -n 10 -c \
+       -w 1 -n 5 -c \
        -e configs/replication/classification-PPI-FeatureOnly.json \
        -g data/PPI -p ppi \
        -o output/PPI-result.FeatureOnly.jsonl \
@@ -32,7 +32,7 @@ python src/run_node_inference_experiment.py \
 
 # Features plus IGEL w/ C = 1
 python src/run_node_inference_experiment.py \
-       -w 1 -n 10 -c \
+       -w 1 -n 5 -c \
        -e configs/replication/classification-PPI-C1-Feats.json \
        -g data/PPI -p ppi \
        -o output/PPI-result.C1-Feats.jsonl \
@@ -40,7 +40,7 @@ python src/run_node_inference_experiment.py \
 
 # Features plus IGEL w/ C = 2
 python src/run_node_inference_experiment.py \
-       -w 1 -n 10 -c \
+       -w 1 -n 5 -c \
        -e configs/replication/classification-PPI-C2-Feats.json \
        -g data/PPI -p ppi \
        -o output/PPI-result.C2-Feats.jsonl \
@@ -48,7 +48,7 @@ python src/run_node_inference_experiment.py \
 
 # No features plus IGEL w/ C = 1
 python src/run_node_inference_experiment.py \
-       -w 1 -n 10 -c \
+       -w 1 -n 5 -c \
        -e configs/replication/classification-PPI-C1-NoFeats.json \
        -g data/PPI -p ppi \
        -o output/PPI-result.C1-NoFeats.jsonl \
@@ -56,7 +56,7 @@ python src/run_node_inference_experiment.py \
 
 # No features plus IGEL w/ C = 2
 python src/run_node_inference_experiment.py \
-       -w 1 -n 10 -c \
+       -w 1 -n 5 -c \
        -e configs/replication/classification-PPI-C2-NoFeats.json \
        -g data/PPI -p ppi \
        -o output/PPI-result.C2-NoFeats.jsonl \
