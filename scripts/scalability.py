@@ -20,7 +20,7 @@ from parameters import IGELParameters, NegativeSamplingParameters, TrainingParam
 
 CPU = torch.device('cpu')
 CUDA = torch.device('cuda')
-DEVICE = GPU if len(sys.argv) > 1 and sys.argv[1] == 'gpu' else CPU
+DEVICE = CUDA if len(sys.argv) > 1 and sys.argv[1] == 'gpu' else CPU
 
 NUM_EPOCHS = 3
 NUM_EXPERIMENTS = 5
