@@ -49,7 +49,7 @@ python src/run_node_inference_experiment.py \
 # No features plus IGEL w/ C = 1
 python src/run_node_inference_experiment.py \
        -w 1 -n 5 -c \
-       -e configs/replication/classification-PPI-C1-NoFeats.json \
+       -e configs/replication/classification-PPI-C1-Graph.json \
        -g data/PPI -p ppi \
        -o output/PPI-result.C1-NoFeats.jsonl \
        -m ''
@@ -57,7 +57,7 @@ python src/run_node_inference_experiment.py \
 # No features plus IGEL w/ C = 2
 python src/run_node_inference_experiment.py \
        -w 1 -n 5 -c \
-       -e configs/replication/classification-PPI-C2-NoFeats.json \
+       -e configs/replication/classification-PPI-C2-Graph.json \
        -g data/PPI -p ppi \
        -o output/PPI-result.C2-NoFeats.jsonl \
        -m ''
