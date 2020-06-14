@@ -1,9 +1,9 @@
 {
     "input_size": [0],
-    "hidden_size": [640],
+    "hidden_size": [512],
     "output_size": [121],
-    "depth": [3],
-    "activation": ["elu"],
+    "depth": [4],
+    "activation": ["tanh"],
     "node_dropouts": [[]], 
     "output_sizes": [[]],
     "activations": [[]],
@@ -31,7 +31,7 @@
     "window_size": [15],
     "negatives_per_positive": [7],
     "encoding_distance": [2],
-    "vector_length": [256],
+    "vector_length": [64],
     "model_type": ["simple"],
     "use_distance_labels": [true],
     "gates_steps": [0],
@@ -46,3 +46,4 @@
     "rescale_features": [false],
     "split_by_nodes": [false]
 }
+
