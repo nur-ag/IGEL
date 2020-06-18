@@ -16,7 +16,7 @@ We have tried to keep the project fully replicable from the first moment. All ru
 $ python -m pip install -r requirements.txt
 ```
 
-It might be advisable to create a ![virtual environment](https://virtualenv.pypa.io/en/latest/) before doing this to avoid polluting your whole python environment.
+It might be advisable to create a [virtual environment](https://virtualenv.pypa.io/en/latest/) before doing this to avoid polluting your whole python environment.
 
 In principle, all dependencies as they are found in the author's computer should be installed by calling `pip` on `requirements.txt`. In practice, this might not be the case, so please open an issue if you get stuck so we figure out what the problem is. The code has been tested on a single Mac OS laptop and two different Linux servers. This should be better than 'works in my machine', but perhaps not.
 
