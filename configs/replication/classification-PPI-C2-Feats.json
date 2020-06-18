@@ -13,7 +13,7 @@
     "num_attention_heads": [[]],
     "attention_aggregators": [[]],
     "attention_dropouts": [[]],
-    "epochs": [500],
+    "epochs": [1000],
     "batch_size": [20000],
     "learning_rate": [0.005],
     "problem_type": ["multilabel"],
