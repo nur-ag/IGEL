@@ -4,6 +4,7 @@ sys.path.append('../src')
 from collections import Counter
 
 import igraph as ig
+from wl import weisfeiler_lehman
 from structural import StructuralMapper
 
 ROOK_EDGES = [(0, 1), (0, 2), (0, 3), (0, 4), (0, 8), (0, 12), (1, 2), (1, 3), (1, 5), (1, 9), (1, 13), (2, 3), (2, 6), (2, 10), (2, 14), (3, 7), (3, 11), (3, 15), (4, 5), (4, 6), (4, 7), (4, 8), (4, 12), (5, 6), (5, 7), (5, 9), (5, 13), (6, 7), (6, 10), (6, 14), (7, 11), (7, 15), (8, 9), (8, 10,), (8, 11), (8, 12), (9, 10), (9, 11), (9, 13), (10, 11), (10, 14), (11, 15), (12, 13), (12, 14), (12, 15), (13, 14), (13, 15), (14, 15)]
@@ -31,6 +32,9 @@ if PLOT_GRAPHS:
     ig.plot(s_G, layout=s_G.layout("fr"), target=ax)
     plt.show()
 else:
+    print(f'The maximum degree of Rook is {max(r_G.degree())} while for Shrikhande it is {max(s_G.degree())}.')
+    wl_1, wl_2 = weisfeiler_lehman(r_G), weisfeiler_lehman(s_G)
+    print(f'The 1-WL coloring of Rook is {wl_1} while for Shrikhande is {wl_2}, equal despite not being isomorphic.')
     r_sm_1 = StructuralMapper(r_G, distance=1, use_distances=True, cache_field='neigh_deg_1', num_workers=1)
     s_sm_1 = StructuralMapper(s_G, distance=1, use_distances=True, cache_field='neigh_deg_1', num_workers=1)
 
