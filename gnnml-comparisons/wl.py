@@ -17,10 +17,12 @@ def weisfeiler_lehman(G, verbose=False, hash_function="reindex", include_self=Fa
     coloring = G.degree()
     if hash_function == "concatenate":
         coloring = [(c,) for c in coloring]
+    if hash_function == "reindex":
+        indices = {v: i for i, v in enumerate(sorted(list(set(coloring))))}
+        coloring = [indices[c] for c in coloring]
     new_coloring = []
     while not new_coloring or not bijective_mapping(coloring, new_coloring):
         coloring = new_coloring if new_coloring else coloring
-        new_offset = max(coloring)
         new_coloring = []
         if verbose:
             print("Before loop", coloring, new_coloring)
@@ -38,7 +40,7 @@ def weisfeiler_lehman(G, verbose=False, hash_function="reindex", include_self=Fa
             # Compute the equivalence classes (equally valued colors) and hashes
             equivalence_classes = sorted(list(set(new_coloring)))
             equivalence_classes = {
-                fingerprint: new_offset + i 
+                fingerprint: i + max(coloring) + 1
                 for i, fingerprint in enumerate(equivalence_classes, 1)
             }
             new_coloring = [equivalence_classes[fingerprint] for fingerprint in new_coloring]

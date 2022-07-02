@@ -1,12 +1,19 @@
-# IGEL: Inductive Graph Embeddings through Locality Encodings
+# IGEL: Inductive Graph Encodings of Local Information
 
 ## Brief Description
 
 This repository contains the code and experiments for 
-IGEL, a graph embedding method for unattributed graphs that relies only on locality encodings. This involves PyTorch layer implementations, as well
-as the boilerplate code to run the different experiments in a reproducible manner. 
+IGEL, a graph encoding method for unattributed graphs that relies only on locality information.
+
+We include PyTorch layer implementations, as well as the boilerplate code to run the different 
+experiments in a reproducible manner. 
 
 ## Replicating the Results
+
+**Note**: The following applies to Link Prediction, Vertex Classification, Clustering and 
+Scalability results. For the GNN results, see the [companion 
+repository](https://github.com/nur-ag/gnn-matlang) based on [the repo for "Breaking the Limits 
+of Message Passing Graph Neural Networks" published in ICML 2021](https://github.com/balcilar/gnn-matlang):
 
 We have tried to keep the project fully replicable from the first moment. All runs are seeded and all training configurations are tracked my means of json files. However, this code is messy, has no unit testing in place, and might make your computer explode. Special researcher gloves are recommended as protection, should your device catch on fire. If you are properly equipped, replicating the results should be a matter of:
 

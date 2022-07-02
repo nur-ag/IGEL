@@ -32,16 +32,16 @@ if PLOT_GRAPHS:
     ig.plot(f_G, layout=f_G.layout("fr"), target=ax)
     plt.show()
 else:
-    print(f'The maximum degree of Cospectral is {max(c_G.degree())} while for Four-regular it is {max(f_G.degree())}.')
-    wl_1, wl_2 = weisfeiler_lehman(c_G), weisfeiler_lehman(f_G)
-    print(f'The 1-WL coloring of Cospectral is {wl_1} while for Four-regular is {wl_2}, equal despite not being isomorphic.')
+    print(f'The maximum degree of the first Cospectral 4-reg graph is {max(c_G.degree())} while for second Cospectral 4-reg graph it is {max(f_G.degree())}.')
+    wl_1, wl_2 = sorted(weisfeiler_lehman(c_G)), sorted(weisfeiler_lehman(f_G))
+    print(f'The 1-WL coloring of the first Cospectral 4-reg graph is {wl_1} while for the second Cospectral 4-reg graph is {wl_2}, equal despite not being isomorphic.')
     c_sm_1 = StructuralMapper(c_G, distance=1, use_distances=True, cache_field='neigh_deg_1', num_workers=1)
     f_sm_1 = StructuralMapper(f_G, distance=1, use_distances=True, cache_field='neigh_deg_1', num_workers=1)
 
     c_mapping_1 = Counter([tuple(sorted(zip(*x))) for x in c_sm_1.mapping(c_G.vs, c_G)])
     f_mapping_1 = Counter([tuple(sorted(zip(*x))) for x in f_sm_1.mapping(f_G.vs, f_G)])
     if c_mapping_1 != f_mapping_1:
-        print('IGEL with encoding distance = 1 produces different mappings for Cospectral and Four-regular graphs.', '\n• Coespectral:\n\t', c_mapping_1, '\n• Four-Regular:\n\t', f_mapping_1)
+        print('IGEL with encoding distance = 1 produces different mappings for 2 Cospectral and Four-regular graphs.', '\n• Coespectral:\n\t', c_mapping_1, '\n• Four-Regular:\n\t', f_mapping_1)
 
     c_sm_2 = StructuralMapper(c_G, distance=2, use_distances=True, cache_field='neigh_deg_2', num_workers=1)
     f_sm_2 = StructuralMapper(f_G, distance=2, use_distances=True, cache_field='neigh_deg_2', num_workers=1)
@@ -50,7 +50,7 @@ else:
     f_mapping_2 = Counter([tuple(sorted(zip(*x))) for x in f_sm_2.mapping(f_G.vs, f_G)])
 
     if c_mapping_2 != f_mapping_2:
-        print('IGEL with encoding distance = 2 produces different mappings for Cospectral and Four-regular graphs.', '\n• Coespectral:\n\t', c_mapping_2, '\n• Four-Regular:\n\t', f_mapping_2)
+        print('IGEL with encoding distance = 2 produces different mappings for 2 Cospectral and Four-regular graphs.', '\n• Coespectral:\n\t', c_mapping_2, '\n• Four-Regular:\n\t', f_mapping_2)
 
     c_sm_3 = StructuralMapper(c_G, distance=3, use_distances=True, cache_field='neigh_deg_3', num_workers=1)
     f_sm_3 = StructuralMapper(f_G, distance=3, use_distances=True, cache_field='neigh_deg_3', num_workers=1)
@@ -59,4 +59,4 @@ else:
     f_mapping_3 = Counter([tuple(sorted(zip(*x))) for x in f_sm_3.mapping(f_G.vs, f_G)])
 
     if c_mapping_3 != f_mapping_3:
-        print('IGEL with encoding distance = 3 produces different mappings for Cospectral and Four-regular graphs.', '\n• Coespectral:\n\t', c_mapping_3, '\n• Four-Regular:\n\t', f_mapping_3)
+        print('IGEL with encoding distance = 3 produces different mappings for 2 Cospectral and Four-regular graphs.', '\n• Coespectral:\n\t', c_mapping_3, '\n• Four-Regular:\n\t', f_mapping_3)

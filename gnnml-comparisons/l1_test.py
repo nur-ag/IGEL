@@ -33,7 +33,7 @@ if PLOT_GRAPHS:
     plt.show()
 else:
     print(f'The maximum degree of Decalin is {max(d_G.degree())} while for Bicyclopentyl it is {max(b_G.degree())}.')
-    wl_1, wl_2 = weisfeiler_lehman(d_G), weisfeiler_lehman(b_G)
+    wl_1, wl_2 = sorted(weisfeiler_lehman(d_G)), sorted(weisfeiler_lehman(b_G))
     assert wl_1 == wl_2, '1-WL is equivalent for Decalin and Bicyclopentyl.'
     print(f'The 1-WL coloring of Decalin is {wl_1} while for Bicyclopentyl is {wl_2}, equal despite not being isomorphic.')
     wl_1, wl_2 = weisfeiler_lehman(d_G, hash_function="concatenate"), weisfeiler_lehman(b_G, hash_function="concatenate")

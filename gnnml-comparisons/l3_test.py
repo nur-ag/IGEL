@@ -24,16 +24,22 @@ s_G.vs['name'] = [str(n.index) for n in s_G.vs]
 
 if PLOT_GRAPHS:
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    ig.plot(r_G, layout=r_G.layout("fr"), target=ax)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    plt.axis('off')
+    ig.plot(r_G, layout=r_G.layout("circle"), target=ax, vertex_size=12, vertex_color="red", autocurve=True)
+    plt.tight_layout(pad=0.0)
+    plt.savefig("4x4Rook.pdf")
     plt.show()
 
-    fig, ax = plt.subplots()
-    ig.plot(s_G, layout=s_G.layout("fr"), target=ax)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    plt.axis('off')
+    ig.plot(s_G, layout=s_G.layout("circle"), target=ax, vertex_size=12, vertex_color="blue", autocurve=True)
+    plt.tight_layout(pad=0.0)
+    plt.savefig("Shrikhande.pdf")
     plt.show()
 else:
     print(f'The maximum degree of Rook is {max(r_G.degree())} while for Shrikhande it is {max(s_G.degree())}.')
-    wl_1, wl_2 = weisfeiler_lehman(r_G), weisfeiler_lehman(s_G)
+    wl_1, wl_2 = sorted(weisfeiler_lehman(r_G)), sorted(weisfeiler_lehman(s_G))
     print(f'The 1-WL coloring of Rook is {wl_1} while for Shrikhande is {wl_2}, equal despite not being isomorphic.')
     r_sm_1 = StructuralMapper(r_G, distance=1, use_distances=True, cache_field='neigh_deg_1', num_workers=1)
     s_sm_1 = StructuralMapper(s_G, distance=1, use_distances=True, cache_field='neigh_deg_1', num_workers=1)
@@ -69,4 +75,3 @@ else:
 
     if r_mapping_4 == s_mapping_4: 
         print('IGEL with encoding distance = 4 produces equivalent mappings for 4x4 Rook and Shrikhande graphs.', '\n• Rook:\n\t', r_mapping_4, '\n• Shrikhande:\n\t', s_mapping_4)
-    
