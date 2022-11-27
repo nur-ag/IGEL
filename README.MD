@@ -1,12 +1,47 @@
-# IGEL: Inductive Graph Encodings of Local Information
+# IGEL: Beyond 1-WL with Local Ego-Network Encodings
 
 ## Brief Description
 
 This repository contains the code and experiments for 
-IGEL, a graph encoding method for unattributed graphs that relies only on locality information.
+IGEL, a graph encoding method for unattributed graphs that relies only on local ego-network information.
 
-We include PyTorch layer implementations, as well as the boilerplate code to run the different 
-experiments in a reproducible manner. 
+We include our IGEL implementation, as well as the boilerplate code to run the different 
+experiments in a reproducible manner. We provide a quick 'drag and drop' IGEL BFS implementation (without log-1p 
+normalization, mapping (distance, degree) pairs to sparse vector indices, relative degrees, and assuming the
+[python-igraph](https://igraph.readthedocs.io/en/0.10.2/index.html) library) below:
+
+```python
+import igraph as ig
+from collections import Counter
+
+
+def igel_bfs(input_node, alpha=2):
+    if alpha == 0:
+        return {(0, input_node.degree()): 1}
+    to_visit = [input_node]
+    degrees = {}
+    distances = {input_node: 0}
+    while to_visit:
+        node = to_visit[0]
+        del to_visit[0]
+        current_distance = distances[node]
+        current_degree = 0
+        for neigh in node.neighbors():
+            if neigh not in distances:
+                distances[neigh] = current_distance + 1
+            if distances[neigh] <= alpha:
+                current_degree += 1
+                if neigh not in degrees:
+                    to_visit.append(neigh)
+        degrees[node] = current_degree
+    counts = Counter((distances[node], degree) for node, degree in degrees.items())
+    return {igel_pair: count for igel_pair, count in sorted(counts.most_common())}
+
+
+G = ig.Graph.Tree(28, 3)
+print(igel_bfs(G.vs[0]))
+# prints: {(0, 3): 1, (1, 4): 3, (2, 1): 9}
+```
 
 ## Replicating the Results
 
@@ -15,7 +50,7 @@ Scalability results. For the GNN results, see the [companion
 repository](https://github.com/nur-ag/gnn-matlang) based on [the repo for "Breaking the Limits 
 of Message Passing Graph Neural Networks" published in ICML 2021](https://github.com/balcilar/gnn-matlang):
 
-We have tried to keep the project fully replicable from the first moment. All runs are seeded and all training configurations are tracked my means of json files. However, this code is messy, has no unit testing in place, and might make your computer explode. Special researcher gloves are recommended as protection, should your device catch on fire. If you are properly equipped, replicating the results should be a matter of:
+All runs are seeded and all training configurations are tracked my means of json files. Replicating the results should be a matter of:
 
 1. **Installing the dependencies.**
 
@@ -23,9 +58,7 @@ We have tried to keep the project fully replicable from the first moment. All ru
 $ python -m pip install -r requirements.txt
 ```
 
-It might be advisable to create a [virtual environment](https://virtualenv.pypa.io/en/latest/) before doing this to avoid polluting your whole python environment.
-
-In principle, all dependencies as they are found in the author's computer should be installed by calling `pip` on `requirements.txt`. In practice, this might not be the case, so please open an issue if you get stuck so we figure out what the problem is. The code has been tested on a single Mac OS laptop and two different Linux servers. This should be better than 'works in my machine', but perhaps not.
+It might be advisable to create a [virtual environment](https://virtualenv.pypa.io/en/latest/) before doing this to avoid polluting your whole python environment. In principle, all dependencies to reproduce our results require calling `pip` on `requirements.txt`. 
 
 2. **Downloading the datasets.**
 
@@ -38,8 +71,6 @@ $ ./replication.sh
 ```
 
 The replication script should replicate the results sequentially and very slowly if you don't have a GPU. If you already have resulting outputs in the `output/` folder, the experiments will NOT run! Take this into consideration.
-
-It might be a good idea to append `&` to each of the executions to run them in the background at the same time, if you have enough resources and don't mind it burning down your machine. It will try to take all the available CPUs, which might not be a great idea given Python's threading model and how it plays with memory. Your mileage might vary, and PRs are more than welcome to improve this point. 
 
 ## Hardware Requirements
 
