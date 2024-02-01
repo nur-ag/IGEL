@@ -2,5 +2,5 @@ numpy==1.16.1
 tqdm==4.11.2
 torch==1.9.1
 python_igraph==0.9.7
-scikit_learn==1.0
+scikit_learn==1.0.1
 dill==0.3.4
